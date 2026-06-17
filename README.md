@@ -21,15 +21,39 @@ replay on repeat) but fiddly to get right: you have to buffer the body, detect a
 different request, reject duplicates that are still in flight, and avoid caching transient
 failures. OrionOnce does those four things.
 
+## Features
+
+- **`Idempotency-Key` middleware** that runs your handler once per key and replays the captured
+  response on every retry, marked with an `Idempotency-Replayed: true` header.
+- **Request fingerprinting** via SHA-256 over method, path (with query), and body, so a key reused
+  for a different request is detected and rejected instead of silently replayed.
+- **In-flight protection**: a duplicate that arrives while the first request is still running gets
+  `409 Conflict` rather than a second execution.
+- **No caching of transient failures**: a handler exception or a `5xx` response releases the key,
+  so the client can safely retry it.
+- **Body-size guard**: bodies larger than `MaxBodyBytes` are rejected with `413` before any work.
+- **Pluggable storage** behind `IIdempotencyStore`; ships with an in-process
+  `InMemoryIdempotencyStore` and lets you swap in a shared store for multi-instance deployments.
+- **OpenTelemetry metrics** through a `Moongazing.OrionOnce` meter with an outcome-tagged counter.
+- **Multi-targeted** for `net8.0`, `net9.0`, and `net10.0`, nullable-enabled, warnings-as-errors.
+
 ## Install
 
 ```
 dotnet add package OrionOnce
 ```
 
+The package id is `OrionOnce`; the root namespace is `Moongazing.OrionOnce`.
+
 ## Quick start
 
+Register the services, then add the middleware after routing and before your endpoints.
+
 ```csharp
+using Moongazing.OrionOnce;
+
+var builder = WebApplication.CreateBuilder(args);
+
 builder.Services.AddOrionOnce(o =>
 {
     o.Retention = TimeSpan.FromHours(24);
@@ -37,9 +61,12 @@ builder.Services.AddOrionOnce(o =>
 });
 
 var app = builder.Build();
+
 app.UseRouting();
 app.UseOrionOnce();                        // after routing, before your endpoints
 app.MapControllers();
+
+app.Run();
 ```
 
 A client then retries safely:
@@ -52,7 +79,14 @@ Idempotency-Key: 3f1c9b8a-...
 # retry       -> handler skipped, the same 201 replayed with "Idempotency-Replayed: true"
 ```
 
-## Behaviour
+Only `POST`, `PUT`, `PATCH`, and `DELETE` are guarded by default; safe methods (`GET`, `HEAD`,
+`OPTIONS`) pass through untouched because they need no protection.
+
+## Usage
+
+### Conflict and replay behaviour
+
+The middleware resolves every guarded request carrying a key to exactly one of these outcomes:
 
 | Situation | Result |
 |-----------|--------|
@@ -61,32 +95,150 @@ Idempotency-Key: 3f1c9b8a-...
 | Same key, request still in flight | `409 Conflict` (no second execution) |
 | Same key, different request body | `422 Unprocessable Entity` |
 | Guarded method, no key, `RequireKey = true` | `400 Bad Request` |
+| Guarded method, no key, `RequireKey = false` | Bypassed; handled normally |
 | Handler throws or returns `5xx` | Key released, not cached, so the client can retry |
 | Body larger than `MaxBodyBytes` | `413 Payload Too Large` |
 
-Only `POST`, `PUT`, `PATCH`, and `DELETE` are guarded by default (configurable via `Methods`);
-safe methods need no protection.
+### Fingerprint scope
 
-## Storage
+A key alone does not identify a request. OrionOnce binds each key to a fingerprint computed by
+`RequestFingerprint.Compute`, a SHA-256 over the uppercased method, the path plus query string, and
+the body bytes. Two requests that present the same key must produce the same fingerprint; otherwise
+the second is rejected with `422`. The fingerprint is exposed as a static helper if you need to
+compute it yourself:
 
-The default store is an in-process `InMemoryIdempotencyStore`, which is correct for a single
-instance. For a multi-instance deployment, implement `IIdempotencyStore` over Redis or a database
-and register it before `AddOrionOnce()`; the in-memory store is only added if none is present.
-Implementations must make `AcquireAsync` atomic so two concurrent requests with the same key
-cannot both be told to proceed.
+```csharp
+using Moongazing.OrionOnce;
+
+string fingerprint = RequestFingerprint.Compute("POST", "/orders?expedite=1", bodyBytes);
+// 64-character lowercase hex SHA-256 digest
+```
+
+### Custom store
+
+The default store is process-local. For a deployment with more than one instance, implement
+`IIdempotencyStore` over a shared backend (Redis, SQL, etc.) and register it before or after
+`AddOrionOnce()`. The library only adds the in-memory store when none is present, so your
+registration wins.
+
+```csharp
+using Moongazing.OrionOnce.Storage;
+
+public sealed class RedisIdempotencyStore : IIdempotencyStore
+{
+    public Task<IdempotencyLease> AcquireAsync(
+        string key, string fingerprint, CancellationToken cancellationToken = default)
+    {
+        // Must be atomic: two concurrent requests with the same key must not both
+        // receive IdempotencyOutcome.Acquired. Return:
+        //   IdempotencyLease.Completed(response) when the key already finished,
+        //   the in-progress outcome while another request holds the key,
+        //   the mismatch outcome when the stored fingerprint differs,
+        //   the acquired outcome when this caller claims the key.
+        throw new NotImplementedException();
+    }
+
+    public Task CompleteAsync(
+        string key, CachedResponse response, CancellationToken cancellationToken = default) =>
+        // Persist the captured response so later requests replay it.
+        throw new NotImplementedException();
+
+    public Task ReleaseAsync(string key, CancellationToken cancellationToken = default) =>
+        // Drop a still-in-progress claim so the request can be retried.
+        throw new NotImplementedException();
+}
+```
+
+```csharp
+builder.Services.AddSingleton<IIdempotencyStore>(new RedisIdempotencyStore(/* ... */));
+builder.Services.AddOrionOnce();
+```
+
+`AcquireAsync` must be atomic so two concurrent requests with the same key cannot both be told to
+proceed. See [docs/FEATURES.md](docs/FEATURES.md) for the full store contract and lifecycle.
+
+## Configuration
+
+`AddOrionOnce` takes an optional `Action<IdempotencyOptions>`. The options are validated at
+registration (`HeaderName` must be non-empty; `Retention` and `MaxBodyBytes` must be positive).
+
+| Option | Type | Default | Purpose |
+|--------|------|---------|---------|
+| `HeaderName` | `string` | `Idempotency-Key` | The request header that carries the key |
+| `Retention` | `TimeSpan` | 24 hours | How long a captured response is retained for replay |
+| `Methods` | `ISet<string>` | `POST`, `PUT`, `PATCH`, `DELETE` | The HTTP methods that are guarded (case-insensitive) |
+| `RequireKey` | `bool` | `false` | When `true`, a guarded request with no key is rejected `400`; when `false`, it bypasses idempotency |
+| `MaxBodyBytes` | `int` | 1 MiB | Largest buffered request body; larger bodies are rejected `413` |
+
+```csharp
+builder.Services.AddOrionOnce(o =>
+{
+    o.HeaderName = "Idempotency-Key";
+    o.Retention = TimeSpan.FromHours(6);
+    o.RequireKey = true;
+    o.MaxBodyBytes = 256 * 1024;
+    o.Methods.Add("POST");                 // Methods is a mutable set; adjust to taste
+});
+```
 
 ## Telemetry
 
-Subscribe to the `Moongazing.OrionOnce` meter. The `oriononce.requests` counter is tagged with
-`outcome`: `acquired`, `replayed`, `in_progress`, `mismatch`, `missing_key`, or `bypassed`.
+OrionOnce publishes metrics through `IdempotencyDiagnostics`, which owns a `Meter` named
+`Moongazing.OrionOnce` (also exposed as `IdempotencyDiagnostics.MeterName`). It defines a single
+counter, `oriononce.requests`, tagged with `outcome`:
 
-## Design
+`acquired`, `replayed`, `in_progress`, `mismatch`, `missing_key`, `bypassed`.
+
+Subscribe to the meter from OpenTelemetry:
+
+```csharp
+builder.Services.AddOpenTelemetry()
+    .WithMetrics(m => m.AddMeter(IdempotencyDiagnostics.MeterName));
+```
+
+The replayed response also carries the `Idempotency-Replayed: true` header
+(`IdempotencyMiddleware.ReplayedHeader`), which clients and proxies can inspect directly.
+
+## Testing
+
+The library is covered by an xUnit suite under `tests/Moongazing.OrionOnce.Tests` spanning the
+store, the fingerprint, the middleware (replay, conflict, mismatch, bypass, required-key, handler
+failure, `5xx` not cached, body limit), and registration.
+
+```
+dotnet test
+```
+
+Benchmarks for the in-process hot paths (fingerprint, store, and combined request flow) live under
+`benchmarks/Moongazing.OrionOnce.Benchmarks` and are documented in
+[benchmarks.md](benchmarks.md). No measured numbers are committed; run the suite on the hardware
+you care about:
+
+```
+dotnet run -c Release --project benchmarks/Moongazing.OrionOnce.Benchmarks
+```
+
+## Versioning
+
+OrionOnce follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Notable changes are
+recorded in [CHANGELOG.md](CHANGELOG.md). The current release is `0.1.0`; while the major version
+is `0`, the public surface may still change between minor versions.
+
+## Design notes
 
 - Multi-targets `net8.0`, `net9.0`, `net10.0`.
 - `TreatWarningsAsErrors`, latest analyzers, nullable enabled.
 - Response capture replays the status, content type, and body. Other response headers are not
   replayed in this version.
 
+See [docs/FEATURES.md](docs/FEATURES.md) for a deeper breakdown and [docs/ROADMAP.md](docs/ROADMAP.md)
+for ideas under consideration.
+
+## Contributing
+
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and the
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) before opening a pull request.
+
 ## License
 
-MIT.
+[MIT](LICENSE).

@@ -11,6 +11,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Moongazing.OrionOnce.Tests", "tests\Moongazing.OrionOnce.Tests\Moongazing.OrionOnce.Tests.csproj", "{301D511C-9832-491A-B560-ADBF3DDE6CF6}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "benchmarks", "benchmarks", "{66320409-64EC-F7C5-3DEF-65E7510DAAD1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Moongazing.OrionOnce.Benchmarks", "benchmarks\Moongazing.OrionOnce.Benchmarks\Moongazing.OrionOnce.Benchmarks.csproj", "{876E05F5-2268-45B8-B1D8-523903B7236B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -45,6 +49,18 @@ Global
 		{301D511C-9832-491A-B560-ADBF3DDE6CF6}.Release|x64.Build.0 = Release|Any CPU
 		{301D511C-9832-491A-B560-ADBF3DDE6CF6}.Release|x86.ActiveCfg = Release|Any CPU
 		{301D511C-9832-491A-B560-ADBF3DDE6CF6}.Release|x86.Build.0 = Release|Any CPU
+		{876E05F5-2268-45B8-B1D8-523903B7236B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{876E05F5-2268-45B8-B1D8-523903B7236B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{876E05F5-2268-45B8-B1D8-523903B7236B}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{876E05F5-2268-45B8-B1D8-523903B7236B}.Debug|x64.Build.0 = Debug|Any CPU
+		{876E05F5-2268-45B8-B1D8-523903B7236B}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{876E05F5-2268-45B8-B1D8-523903B7236B}.Debug|x86.Build.0 = Debug|Any CPU
+		{876E05F5-2268-45B8-B1D8-523903B7236B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{876E05F5-2268-45B8-B1D8-523903B7236B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{876E05F5-2268-45B8-B1D8-523903B7236B}.Release|x64.ActiveCfg = Release|Any CPU
+		{876E05F5-2268-45B8-B1D8-523903B7236B}.Release|x64.Build.0 = Release|Any CPU
+		{876E05F5-2268-45B8-B1D8-523903B7236B}.Release|x86.ActiveCfg = Release|Any CPU
+		{876E05F5-2268-45B8-B1D8-523903B7236B}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -52,5 +68,6 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{46BB9C27-EE3A-4A98-AA7D-D40922C56462} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{301D511C-9832-491A-B560-ADBF3DDE6CF6} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{876E05F5-2268-45B8-B1D8-523903B7236B} = {66320409-64EC-F7C5-3DEF-65E7510DAAD1}
 	EndGlobalSection
 EndGlobal

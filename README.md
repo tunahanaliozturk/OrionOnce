@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/logo.png" alt="OrionOnce" width="150" />
+</p>
+
 # OrionOnce
 
 [![CI/CD](https://github.com/tunahanaliozturk/OrionOnce/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/tunahanaliozturk/OrionOnce/actions/workflows/ci-cd.yml)

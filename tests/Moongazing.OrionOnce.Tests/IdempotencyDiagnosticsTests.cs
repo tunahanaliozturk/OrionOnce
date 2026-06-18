@@ -6,6 +6,20 @@ using Moongazing.OrionOnce.Diagnostics;
 
 using Xunit;
 
+/// <summary>
+/// Serializes every test class that emits to the process-global
+/// <c>Moongazing.OrionOnce</c> meter. The meter is named by a shared constant, so under
+/// xUnit's default per-class parallelism a <see cref="MeterListener"/> filtering by meter
+/// name observes measurements emitted by sibling classes running concurrently. Membership in
+/// this non-parallel collection guarantees no foreign emitter is active during the
+/// listener-based assertions.
+/// </summary>
+[CollectionDefinition(nameof(MeterSerial), DisableParallelization = true)]
+public sealed class MeterSerial
+{
+}
+
+[Collection(nameof(MeterSerial))]
 public sealed class IdempotencyDiagnosticsTests
 {
     [Fact]
@@ -42,7 +56,10 @@ public sealed class IdempotencyDiagnosticsTests
         using var listener = new MeterListener();
         listener.InstrumentPublished = (instrument, l) =>
         {
-            if (instrument.Meter.Name == IdempotencyDiagnostics.MeterName)
+            // Bind to the exact instrument instance under test, not the meter name. The meter
+            // name is a shared process-global constant, so a name match would also enable
+            // measurements from a sibling test class's IdempotencyDiagnostics instance.
+            if (ReferenceEquals(instrument, diagnostics.Requests))
             {
                 l.EnableMeasurementEvents(instrument);
             }

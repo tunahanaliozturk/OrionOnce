@@ -11,6 +11,9 @@ using Moongazing.OrionOnce.Storage;
 
 using Xunit;
 
+// Emits to the shared Moongazing.OrionOnce meter via IdempotencyDiagnostics; serialize against
+// IdempotencyDiagnosticsTests so its MeterListener does not observe these measurements.
+[Collection(nameof(MeterSerial))]
 public sealed class IdempotencyMiddlewareTests
 {
     private sealed class Harness : IDisposable

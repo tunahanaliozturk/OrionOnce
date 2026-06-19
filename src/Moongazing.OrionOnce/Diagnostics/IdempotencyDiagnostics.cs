@@ -17,7 +17,7 @@ public sealed class IdempotencyDiagnostics : IDisposable
     /// <summary>Create the meter and its instruments.</summary>
     public IdempotencyDiagnostics()
     {
-        meter = new Meter(MeterName, "0.1.0");
+        meter = new Meter(MeterName, "0.2.0");
         Requests = meter.CreateCounter<long>(
             "oriononce.requests",
             unit: "{request}",

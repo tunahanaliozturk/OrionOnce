@@ -36,4 +36,16 @@ public interface IIdempotencyStore
     /// <param name="key">The acquired key.</param>
     /// <param name="cancellationToken">Cancels the store operation.</param>
     Task ReleaseAsync(string key, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Remove every entry whose retention window has elapsed and report how many were removed.
+    /// The default <see cref="InMemoryIdempotencyStore"/> evicts expired entries lazily on access,
+    /// so a key never observed again lingers until this is called; run it periodically to reclaim
+    /// the memory those abandoned keys hold. The default interface implementation is a no-op
+    /// returning zero, which suits stores (for example Redis) that expire entries themselves.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the store operation.</param>
+    /// <returns>The number of expired entries removed.</returns>
+    Task<int> SweepAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(0);
 }

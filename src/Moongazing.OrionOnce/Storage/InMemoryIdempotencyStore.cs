@@ -4,7 +4,8 @@ namespace Moongazing.OrionOnce.Storage;
 /// A process-local <see cref="IIdempotencyStore"/> backed by a dictionary. Suitable for a single
 /// instance or for tests; use a shared-store implementation for a multi-instance deployment.
 /// Atomicity is provided by a single lock around the claim/complete critical section, and expired
-/// entries are evicted lazily on access.
+/// entries are evicted lazily on access; call <see cref="SweepAsync"/> to purge keys that are never
+/// touched again.
 /// </summary>
 public sealed class InMemoryIdempotencyStore : IIdempotencyStore
 {
@@ -13,10 +14,21 @@ public sealed class InMemoryIdempotencyStore : IIdempotencyStore
     private readonly TimeSpan ttl;
     private readonly Func<DateTimeOffset> now;
 
-    /// <summary>Create a store with a retention window.</summary>
+    /// <summary>Create a store with a retention window, using the system clock.</summary>
     /// <param name="ttl">How long a completed or in-progress entry is retained.</param>
     public InMemoryIdempotencyStore(TimeSpan ttl)
-        : this(ttl, () => DateTimeOffset.UtcNow)
+        : this(ttl, TimeProvider.System)
+    {
+    }
+
+    /// <summary>Create a store with a retention window, reading time from a supplied provider.</summary>
+    /// <param name="ttl">How long a completed or in-progress entry is retained.</param>
+    /// <param name="timeProvider">
+    /// The clock used for expiry; supply a fake to control time in tests, or
+    /// <see cref="TimeProvider.System"/> in production.
+    /// </param>
+    public InMemoryIdempotencyStore(TimeSpan ttl, TimeProvider timeProvider)
+        : this(ttl, NowFrom(timeProvider))
     {
     }
 
@@ -29,6 +41,12 @@ public sealed class InMemoryIdempotencyStore : IIdempotencyStore
         ArgumentNullException.ThrowIfNull(now);
         this.ttl = ttl;
         this.now = now;
+    }
+
+    private static Func<DateTimeOffset> NowFrom(TimeProvider timeProvider)
+    {
+        ArgumentNullException.ThrowIfNull(timeProvider);
+        return timeProvider.GetUtcNow;
     }
 
     /// <inheritdoc />
@@ -89,6 +107,37 @@ public sealed class InMemoryIdempotencyStore : IIdempotencyStore
         }
 
         return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task<int> SweepAsync(CancellationToken cancellationToken = default)
+    {
+        lock (gate)
+        {
+            var timestamp = now();
+
+            // Collect first, then remove: mutating the dictionary while enumerating it throws.
+            List<string>? expired = null;
+            foreach (var pair in entries)
+            {
+                if (pair.Value.ExpiresAt <= timestamp)
+                {
+                    (expired ??= []).Add(pair.Key);
+                }
+            }
+
+            if (expired is null)
+            {
+                return Task.FromResult(0);
+            }
+
+            foreach (var key in expired)
+            {
+                entries.Remove(key);
+            }
+
+            return Task.FromResult(expired.Count);
+        }
     }
 
     private sealed record Entry(string Fingerprint, CachedResponse? Response, DateTimeOffset ExpiresAt);

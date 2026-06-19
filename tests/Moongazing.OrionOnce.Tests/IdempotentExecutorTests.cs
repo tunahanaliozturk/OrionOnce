@@ -227,10 +227,172 @@ public sealed class IdempotentExecutorTests
         Assert.Equal("hello", second); // the captured value, not the second operation's "world"
     }
 
+    [Fact]
+    public async Task A_serialize_failure_releases_the_claim_so_a_retry_can_rerun()
+    {
+        // The operation succeeds, but the codec throws while capturing its result. The claim must be
+        // released so the key is not stuck in-flight until its TTL, and a retry can rerun.
+        var store = new InMemoryIdempotencyStore(TimeSpan.FromMinutes(5));
+        var executor = new IdempotentExecutor(store);
+        var throwingCodec = new DelegateResultCodec<int>(
+            serialize: _ => throw new FormatException("cannot serialize"),
+            deserialize: payload => BinaryPrimitives.ReadInt32BigEndian(payload));
+        var calls = 0;
+
+        await Assert.ThrowsAsync<FormatException>(() =>
+            executor.ExecuteAsync("k1", "fp", _ =>
+            {
+                calls++;
+                return Task.FromResult(1);
+            }, throwingCodec));
+
+        // The key was released: a retry with a working codec acquires it fresh and completes.
+        var result = await executor.ExecuteAsync("k1", "fp", _ =>
+        {
+            calls++;
+            return Task.FromResult(99);
+        }, IntCodec);
+
+        Assert.Equal(99, result);
+        Assert.Equal(2, calls); // both the failed attempt and the retry ran the operation
+    }
+
+    [Fact]
+    public async Task A_complete_failure_releases_the_claim_so_a_retry_can_rerun()
+    {
+        // The operation succeeds and the result serializes, but the store throws while writing the
+        // completed entry. The claim must still be released so a retry can rerun under the same key.
+        var inner = new InMemoryIdempotencyStore(TimeSpan.FromMinutes(5));
+        var store = new ControllableStore(inner) { FailNextComplete = true };
+        var executor = new IdempotentExecutor(store);
+
+        await Assert.ThrowsAsync<IOException>(() =>
+            executor.ExecuteAsync("k1", "fp", _ => Task.FromResult(1), IntCodec));
+
+        Assert.True(store.ReleaseCalled); // cleanup released the claim
+        store.FailNextComplete = false;
+
+        // The key is free again, so the retry acquires it fresh and succeeds.
+        var result = await executor.ExecuteAsync("k1", "fp", _ => Task.FromResult(42), IntCodec);
+        Assert.Equal(42, result);
+    }
+
+    [Fact]
+    public async Task A_failing_operation_releases_with_a_live_token_even_when_the_caller_token_is_canceled()
+    {
+        // The operation fails because it observed the caller's canceled token. A store that honors
+        // cancellation would skip a release issued on that same canceled token, leaving the key
+        // in-flight. The executor must release with a live token, so the release is recorded.
+        var inner = new InMemoryIdempotencyStore(TimeSpan.FromMinutes(5));
+        var store = new ControllableStore(inner) { SkipReleaseWhenTokenCanceled = true };
+        var executor = new IdempotentExecutor(store);
+
+        using var cts = new CancellationTokenSource();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            executor.ExecuteAsync<int>("k1", "fp", token =>
+            {
+                cts.Cancel();
+                token.ThrowIfCancellationRequested();
+                return Task.FromResult(1);
+            }, IntCodec, cts.Token));
+
+        // The release was issued on an uncancelable token, so the cancellation-honoring store ran it.
+        Assert.True(store.ReleaseCalled);
+        Assert.False(store.ReleaseSkippedDueToCancellation);
+
+        // And the key is genuinely free: a fresh call (new token) acquires and completes.
+        var result = await executor.ExecuteAsync("k1", "fp", _ => Task.FromResult(7), IntCodec);
+        Assert.Equal(7, result);
+    }
+
+    [Fact]
+    public async Task A_throwing_release_does_not_mask_the_original_operation_failure()
+    {
+        // Release cleanup is best-effort: if ReleaseAsync throws on the failure path, the original
+        // operation exception must still propagate unchanged, not be replaced by the release fault.
+        var inner = new InMemoryIdempotencyStore(TimeSpan.FromMinutes(5));
+        var store = new ControllableStore(inner) { FailNextRelease = true };
+        var executor = new IdempotentExecutor(store);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            executor.ExecuteAsync<int>("k1", "fp", _ => throw new InvalidOperationException("boom"), IntCodec));
+
+        Assert.Equal("boom", ex.Message); // the original failure, not the release fault
+        Assert.True(store.ReleaseCalled); // the best-effort release was attempted
+    }
+
+    [Fact]
+    public async Task A_throwing_release_does_not_mask_a_capture_failure()
+    {
+        // Same best-effort guarantee on the capture path: a serialize failure must surface even when
+        // the subsequent release cleanup itself throws.
+        var inner = new InMemoryIdempotencyStore(TimeSpan.FromMinutes(5));
+        var store = new ControllableStore(inner) { FailNextRelease = true };
+        var executor = new IdempotentExecutor(store);
+        var throwingCodec = new DelegateResultCodec<int>(
+            serialize: _ => throw new FormatException("cannot serialize"),
+            deserialize: payload => BinaryPrimitives.ReadInt32BigEndian(payload));
+
+        var ex = await Assert.ThrowsAsync<FormatException>(() =>
+            executor.ExecuteAsync("k1", "fp", _ => Task.FromResult(1), throwingCodec));
+
+        Assert.Equal("cannot serialize", ex.Message);
+        Assert.True(store.ReleaseCalled);
+    }
+
     private sealed class MutableClock(DateTimeOffset start)
     {
         public DateTimeOffset Now { get; private set; } = start;
 
         public void Advance(TimeSpan by) => Now += by;
+    }
+
+    // A decorator over a real store that lets a test inject faults and observe how the executor cleans
+    // up. It also models a store that honors cancellation: when asked, it skips a release whose token
+    // is already canceled, which is exactly the behavior the live-token cleanup must defeat.
+    private sealed class ControllableStore(IIdempotencyStore inner) : IIdempotencyStore
+    {
+        public bool FailNextComplete { get; set; }
+
+        public bool FailNextRelease { get; set; }
+
+        public bool SkipReleaseWhenTokenCanceled { get; set; }
+
+        public bool ReleaseCalled { get; private set; }
+
+        public bool ReleaseSkippedDueToCancellation { get; private set; }
+
+        public Task<IdempotencyLease> AcquireAsync(string key, string fingerprint, CancellationToken cancellationToken = default) =>
+            inner.AcquireAsync(key, fingerprint, cancellationToken);
+
+        public Task CompleteAsync(string key, CachedResponse response, CancellationToken cancellationToken = default)
+        {
+            if (FailNextComplete)
+            {
+                throw new IOException("store write failed");
+            }
+
+            return inner.CompleteAsync(key, response, cancellationToken);
+        }
+
+        public Task ReleaseAsync(string key, CancellationToken cancellationToken = default)
+        {
+            ReleaseCalled = true;
+
+            if (SkipReleaseWhenTokenCanceled && cancellationToken.IsCancellationRequested)
+            {
+                // A cancellation-honoring store would not perform the release on a canceled token.
+                ReleaseSkippedDueToCancellation = true;
+                return Task.CompletedTask;
+            }
+
+            if (FailNextRelease)
+            {
+                throw new InvalidOperationException("release failed");
+            }
+
+            return inner.ReleaseAsync(key, cancellationToken);
+        }
     }
 }

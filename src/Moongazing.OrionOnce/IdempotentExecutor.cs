@@ -28,8 +28,10 @@ public sealed class IdempotentExecutor
     /// The first caller acquires the key and runs the operation; its result is serialized with
     /// <paramref name="codec"/> and stored. A later caller whose entry is still present and whose
     /// fingerprint matches gets the deserialized stored result without running the operation. If
-    /// the operation throws, the key is released so the call can be retried, and the exception is
-    /// propagated unchanged.
+    /// the operation throws, or its result cannot be captured (serialization or the store's
+    /// completion write fails), the key is released so the call can be retried, and the original
+    /// exception is propagated unchanged. That release is best-effort and uses an uncancelable
+    /// token, so it runs even when the caller's token is canceled and never masks the real failure.
     /// </summary>
     /// <typeparam name="TResult">The operation result type.</typeparam>
     /// <param name="key">The idempotency key.</param>
@@ -88,19 +90,55 @@ public sealed class IdempotentExecutor
         catch
         {
             // Release the claim on any failure so the operation can be retried under the same key.
-            await store.ReleaseAsync(key, cancellationToken).ConfigureAwait(false);
+            // The caller's token may already be canceled here (the operation may have failed because
+            // it observed cancellation), and a store that honors cancellation would skip the release,
+            // leaving the key in-flight until its TTL. Use an uncancelable token and swallow any fault
+            // so this best-effort cleanup never masks the original operation exception.
+            await ReleaseQuietlyAsync(key).ConfigureAwait(false);
             throw;
         }
 
-        var captured = new CachedResponse
+        try
         {
-            StatusCode = StatusCodes.Status200Ok,
-            ContentType = codec.ContentType,
-            Body = codec.Serialize(result),
-        };
+            var captured = new CachedResponse
+            {
+                StatusCode = StatusCodes.Status200Ok,
+                ContentType = codec.ContentType,
+                Body = codec.Serialize(result),
+            };
 
-        await store.CompleteAsync(key, captured, cancellationToken).ConfigureAwait(false);
+            await store.CompleteAsync(key, captured, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            // The operation succeeded but its result could not be captured: serialization threw, or
+            // the store failed while writing the completed entry. Release the claim so the key does
+            // not linger as an in-flight entry until its TTL and a retry can rerun the operation.
+            // Same best-effort cleanup as above: uncancelable token, faults swallowed so the real
+            // capture/complete failure propagates unchanged.
+            await ReleaseQuietlyAsync(key).ConfigureAwait(false);
+            throw;
+        }
+
         return result;
+    }
+
+    /// <summary>
+    /// Best-effort release of a claim during failure cleanup. Uses <see cref="CancellationToken.None"/>
+    /// so a store that honors cancellation still performs the release even when the caller's token is
+    /// already canceled, and swallows every fault so the cleanup never replaces the original failure.
+    /// </summary>
+    private async Task ReleaseQuietlyAsync(string key)
+    {
+        try
+        {
+            await store.ReleaseAsync(key, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Intentionally swallowed: this release is best-effort cleanup on a failure path, and its
+            // fault (including cancellation) must not mask the original operation or capture exception.
+        }
     }
 
     // Local mirror of the HTTP status used to mark a captured non-HTTP result, so this type carries

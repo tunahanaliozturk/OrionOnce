@@ -34,6 +34,10 @@ failures. OrionOnce does those four things.
 - **Body-size guard**: bodies larger than `MaxBodyBytes` are rejected with `413` before any work.
 - **Pluggable storage** behind `IIdempotencyStore`; ships with an in-process
   `InMemoryIdempotencyStore` and lets you swap in a shared store for multi-instance deployments.
+- **Capture-and-replay outside HTTP** via `IdempotentExecutor`: run an operation once per key and
+  replay its captured typed result on later duplicate calls, over the same `IIdempotencyStore`.
+- **Retention housekeeping** via `IIdempotencyStore.SweepAsync`, which purges expired entries that
+  were acquired but never seen again, plus a `TimeProvider`-based clock for testable expiry.
 - **OpenTelemetry metrics** through a `Moongazing.OrionOnce` meter with an outcome-tagged counter.
 - **Multi-targeted** for `net8.0`, `net9.0`, and `net10.0`, nullable-enabled, warnings-as-errors.
 
@@ -157,6 +161,67 @@ builder.Services.AddOrionOnce();
 `AcquireAsync` must be atomic so two concurrent requests with the same key cannot both be told to
 proceed. See [docs/FEATURES.md](docs/FEATURES.md) for the full store contract and lifecycle.
 
+### Idempotent execution outside HTTP
+
+Not every duplicate arrives as an HTTP request. A retried message-queue delivery, a re-invoked
+background job, or a repeated RPC needs the same guarantee: run the operation once, replay its
+result the next time. `IdempotentExecutor` provides that over the same `IIdempotencyStore`. The
+first call runs the operation and captures its typed result; a later call with the same key and
+fingerprint replays the stored result without running the operation again.
+
+The library ships no serializer, so you supply a codec that turns the result into bytes and back.
+`DelegateResultCodec<TResult>` wraps a serialize and a deserialize delegate inline, here with
+`System.Text.Json`:
+
+```csharp
+using System.Text.Json;
+using Moongazing.OrionOnce;
+using Moongazing.OrionOnce.Storage;
+
+var store = new InMemoryIdempotencyStore(TimeSpan.FromHours(24));
+var executor = new IdempotentExecutor(store);
+
+var codec = new DelegateResultCodec<Receipt>(
+    serialize: receipt => JsonSerializer.SerializeToUtf8Bytes(receipt),
+    deserialize: payload => JsonSerializer.Deserialize<Receipt>(payload)!,
+    contentType: "application/json");
+
+string key = message.IdempotencyKey;
+string fingerprint = RequestFingerprint.Compute("charge", message.OrderId, message.Body);
+
+Receipt receipt = await executor.ExecuteAsync(
+    key,
+    fingerprint,
+    ct => ChargeAsync(message, ct),   // runs at most once per key
+    codec,
+    cancellationToken);
+```
+
+The outcomes mirror the middleware. A completed key replays its stored result. A key still held by
+a concurrent caller, or reused with a different fingerprint, throws `IdempotentExecutionException`
+carrying the `IdempotencyOutcome` (`InProgress` or `FingerprintMismatch`) so you can map it to a
+retry or a rejection. If the operation throws, or its result cannot be captured, the key is released
+so the call can be retried, and the original exception propagates unchanged.
+
+### Reclaiming expired entries
+
+`InMemoryIdempotencyStore` evicts expired entries lazily on access, so a key that is acquired and
+never touched again holds its memory until the retention window is swept. `SweepAsync` removes every
+entry whose window has elapsed and returns how many it removed; run it periodically (for example
+from a `BackgroundService`) to reclaim that memory:
+
+```csharp
+int removed = await store.SweepAsync(cancellationToken);
+```
+
+The default interface implementation is a no-op returning zero, which suits stores such as Redis
+that expire entries themselves. For testable expiry, the in-memory store also accepts a
+`TimeProvider`, so a fake clock can drive entries past their window in a unit test:
+
+```csharp
+var store = new InMemoryIdempotencyStore(TimeSpan.FromMinutes(5), timeProvider);
+```
+
 ## Configuration
 
 `AddOrionOnce` takes an optional `Action<IdempotencyOptions>`. The options are validated at
@@ -221,7 +286,7 @@ dotnet run -c Release --project benchmarks/Moongazing.OrionOnce.Benchmarks
 ## Versioning
 
 OrionOnce follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Notable changes are
-recorded in [CHANGELOG.md](CHANGELOG.md). The current release is `0.1.0`; while the major version
+recorded in [CHANGELOG.md](CHANGELOG.md). The current release is `0.2.0`; while the major version
 is `0`, the public surface may still change between minor versions.
 
 ## Design notes

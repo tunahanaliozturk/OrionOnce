@@ -3,8 +3,9 @@ namespace Moongazing.OrionOnce.Demo;
 /// <summary>
 /// Runnable console walkthrough of OrionOnce's core idempotency services, driven directly without
 /// starting a web server. It exercises the request fingerprint, a fresh acquire, replay of a
-/// completed response, the in-flight conflict and fingerprint-mismatch rejections, and the full
-/// acquire/complete and acquire/release lifecycle. The program runs to completion and exits.
+/// completed response, the in-flight conflict and fingerprint-mismatch rejections, the full
+/// acquire/complete and acquire/release lifecycle, and the IdempotentExecutor capture-and-replay
+/// path with store sweep. The program runs to completion and exits.
 /// </summary>
 internal static class Program
 {
@@ -19,6 +20,7 @@ internal static class Program
             await AcquireAndReplayDemo.RunAsync();
             await ConflictAndMismatchDemo.RunAsync();
             await LifecycleDemo.RunAsync();
+            await IdempotentExecutorDemo.RunAsync();
         }
         catch (Exception ex)
         {

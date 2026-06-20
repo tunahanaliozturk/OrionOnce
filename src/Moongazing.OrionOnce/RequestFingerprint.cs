@@ -67,7 +67,9 @@ public static class RequestFingerprint
             {
                 if (rentedPrefix is not null)
                 {
-                    ArrayPool<byte>.Shared.Return(rentedPrefix);
+                    // The prefix holds "METHOD\npath\n", which includes the routed path and query.
+                    // Clear it so request data is not left in the shared pool for the next renter.
+                    ArrayPool<byte>.Shared.Return(rentedPrefix, clearArray: true);
                 }
             }
         }
@@ -100,7 +102,9 @@ public static class RequestFingerprint
         {
             if (rentedMessage is not null)
             {
-                ArrayPool<byte>.Shared.Return(rentedMessage);
+                // The message holds the prefix plus the full request body. Clear it so the
+                // plaintext payload is not left in the shared pool for the next renter to observe.
+                ArrayPool<byte>.Shared.Return(rentedMessage, clearArray: true);
             }
         }
 

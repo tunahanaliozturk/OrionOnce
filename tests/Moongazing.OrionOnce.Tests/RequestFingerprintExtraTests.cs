@@ -108,4 +108,21 @@ public sealed class RequestFingerprintExtraTests
 
         Assert.Equal(expectedHex, actual);
     }
+
+    [Fact]
+    public void A_large_body_produces_a_stable_digest()
+    {
+        // A body well over the 256-byte stack threshold forces assembly through the pooled
+        // (rented) buffer, which is cleared on return. The digest must remain byte-identical
+        // to an independently computed SHA-256 over "POST\n/orders\n" + body.
+        var body = Encoding.UTF8.GetBytes(new string('x', 4096));
+
+        var expected = System.Security.Cryptography.SHA256.HashData(
+            Encoding.UTF8.GetBytes("POST\n/orders\n").Concat(body).ToArray());
+        var expectedHex = Convert.ToHexString(expected).ToLowerInvariant();
+
+        var actual = RequestFingerprint.Compute("POST", "/orders", body);
+
+        Assert.Equal(expectedHex, actual);
+    }
 }

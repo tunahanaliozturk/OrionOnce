@@ -6,6 +6,27 @@ All notable changes to OrionOnce are documented in this file. The format is base
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-06-20
+
+### Performance
+
+`RequestFingerprint.Compute` runs on every guarded request before the store is consulted, so its
+per-call allocations were on the hot path. The digest is now produced without the intermediate
+allocations the previous version made, while the wire format (SHA-256 over `METHOD\npath\n` + body,
+returned as 64-char lowercase hex) is byte-for-byte unchanged.
+
+- The method is upper-cased into a stack buffer instead of allocating a string via
+  `ToUpperInvariant()`.
+- The hashed message is assembled in a single `ArrayPool`-rented buffer rather than allocating an
+  interpolated header string, a header `byte[]`, and a combined `byte[]` sized to the body.
+- The hex digest is written directly as lowercase into a stack buffer, replacing the
+  `Convert.ToHexString(...).ToLowerInvariant()` pair of intermediate strings.
+
+Net effect: allocation per call drops to a constant 152 B (only the returned string), independent of
+body size, versus 536 B for a 32-byte body and ~8.7 KB for an 8 KB body before. Measured throughput
+improves roughly 21 to 24 percent across small and large bodies. No public API or observable behavior
+changes; all existing tests pass unchanged.
+
 ## [0.2.0] - 2026-06-19
 
 ### Added
@@ -55,5 +76,6 @@ Initial release. HTTP idempotency for ASP.NET Core.
 25 tests across the store, the fingerprint, the middleware (replay, conflict, mismatch,
 bypass, required-key, handler failure, 5xx not cached, body limit), and registration.
 
+[0.2.1]: https://github.com/tunahanaliozturk/OrionOnce/releases/tag/v0.2.1
 [0.2.0]: https://github.com/tunahanaliozturk/OrionOnce/releases/tag/v0.2.0
 [0.1.0]: https://github.com/tunahanaliozturk/OrionOnce/releases/tag/v0.1.0

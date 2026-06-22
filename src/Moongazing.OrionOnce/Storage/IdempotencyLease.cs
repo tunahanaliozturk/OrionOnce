@@ -52,12 +52,34 @@ public sealed class IdempotencyLease
     /// </summary>
     public CachedResponse? Response { get; }
 
-    internal static IdempotencyLease Acquired { get; } = new(IdempotencyOutcome.Acquired, null);
+    /// <summary>
+    /// The lease for a caller that just claimed a previously unseen key
+    /// (<see cref="IdempotencyOutcome.Acquired"/>). Returned by an <see cref="IIdempotencyStore"/>
+    /// implementation when this caller wins the claim.
+    /// </summary>
+    public static IdempotencyLease Acquired { get; } = new(IdempotencyOutcome.Acquired, null);
 
-    internal static IdempotencyLease InProgress { get; } = new(IdempotencyOutcome.InProgress, null);
+    /// <summary>
+    /// The lease for a key another caller still holds (<see cref="IdempotencyOutcome.InProgress"/>).
+    /// Returned by an <see cref="IIdempotencyStore"/> implementation for a duplicate that arrives
+    /// while the first request is in flight.
+    /// </summary>
+    public static IdempotencyLease InProgress { get; } = new(IdempotencyOutcome.InProgress, null);
 
-    internal static IdempotencyLease FingerprintMismatch { get; } = new(IdempotencyOutcome.FingerprintMismatch, null);
+    /// <summary>
+    /// The lease for a key reused with a different request fingerprint
+    /// (<see cref="IdempotencyOutcome.FingerprintMismatch"/>). Returned by an
+    /// <see cref="IIdempotencyStore"/> implementation when the stored fingerprint differs.
+    /// </summary>
+    public static IdempotencyLease FingerprintMismatch { get; } = new(IdempotencyOutcome.FingerprintMismatch, null);
 
-    internal static IdempotencyLease Completed(CachedResponse response) =>
+    /// <summary>
+    /// Build the lease for a key that already completed
+    /// (<see cref="IdempotencyOutcome.AlreadyCompleted"/>), carrying the response to replay.
+    /// Returned by an <see cref="IIdempotencyStore"/> implementation when the stored response is
+    /// found.
+    /// </summary>
+    /// <param name="response">The captured response to replay.</param>
+    public static IdempotencyLease Completed(CachedResponse response) =>
         new(IdempotencyOutcome.AlreadyCompleted, response);
 }

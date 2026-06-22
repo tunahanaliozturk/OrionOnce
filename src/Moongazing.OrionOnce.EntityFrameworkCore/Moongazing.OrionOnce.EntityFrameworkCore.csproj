@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>OrionOnce.EntityFrameworkCore</PackageId>
+    <RootNamespace>Moongazing.OrionOnce.EntityFrameworkCore</RootNamespace>
+    <Description>A durable Entity Framework Core idempotency store for OrionOnce. Persists idempotency keys, their in-flight lease, and the captured response across instances, with an atomic insert-wins AcquireAsync over a unique key constraint and a bulk-delete SweepAsync. References EntityFrameworkCore.Relational only, so the consumer chooses the database provider.</Description>
+    <PackageTags>idempotency;idempotency-key;entityframeworkcore;efcore;store;orion</PackageTags>
+  </PropertyGroup>
+
+  <!--
+    Pin one EF Core major per target framework. EF Core ships a major release aligned to each .NET
+    major, and a higher EF Core major refuses to load on a lower runtime (NU1202), so the version is
+    selected per TFM rather than floated. Microsoft.EntityFrameworkCore.Relational is referenced
+    instead of a concrete provider: this package targets the relational surface (a unique key
+    constraint plus ExecuteDeleteAsync) and lets the consuming application pick the provider
+    (Npgsql, SqlServer, Sqlite, ...).
+  -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+    <!--
+      Floor is 8.0.10, not 8.0.0: EF Core 8.0.0 drags in Microsoft.Extensions.Caching.Memory 8.0.0,
+      which carries advisory GHSA-qj66-m88j-hmgj (fixed in 8.0.1). The 8.0.10 servicing line
+      references the patched extensions, so the NuGet audit stays clean under TreatWarningsAsErrors.
+    -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="[8.0.10,9.0.0)" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="[9.0.0,10.0.0)" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="[10.0.0,11.0.0)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Moongazing.OrionOnce\Moongazing.OrionOnce.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Moongazing.OrionOnce.EntityFrameworkCore.Tests" />
+  </ItemGroup>
+</Project>

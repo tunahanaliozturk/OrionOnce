@@ -1,6 +1,6 @@
 # OrionOnce roadmap
 
-Current version: **0.2.1**. OrionOnce is an idempotency library for .NET: idempotency keys, request
+Current version: **0.3.0**. OrionOnce is an idempotency library for .NET: idempotency keys, request
 fingerprinting, a pluggable idempotency store, ASP.NET Core middleware that replays a captured HTTP
 response, and an `IdempotentExecutor` that runs an operation once and replays its typed result.
 
@@ -12,6 +12,17 @@ of the releases so far and will move with real work. For the shipped surface see
 
 ## Recently shipped
 
+- **0.3.0 (2026-06-22)** Durable EF Core store. `Moongazing.OrionOnce.EntityFrameworkCore`
+  (package id `OrionOnce.EntityFrameworkCore`) adds `EntityFrameworkCoreIdempotencyStore<TContext>`,
+  an `IIdempotencyStore` over EF Core that persists keys, leases, and captured responses across
+  instances. `AcquireAsync` stays atomic through the key's primary-key unique constraint
+  (insert-wins, with the unique violation confirmed by re-reading the row rather than by a
+  provider-specific error code), and `SweepAsync` bulk-deletes expired rows with
+  `ExecuteDeleteAsync`. The package references `Microsoft.EntityFrameworkCore.Relational` only,
+  pinning one EF Core major per target framework, so the consumer chooses the provider. A reusable
+  `IIdempotencyStore` conformance suite runs the store over real SQLite, including a parallel-acquire
+  concurrency test that asserts exactly one winner. The `IdempotencyLease` factory members are now
+  public so an external store can return them.
 - **0.2.1 (2026-06-20)** Allocation-free fingerprinting. `RequestFingerprint.Compute` now assembles
   the hashed message in a single `ArrayPool`-rented buffer and writes the hex digest into a stack
   buffer, dropping per-call allocation to a constant 152 B independent of body size (versus ~8.7 KB
@@ -28,17 +39,15 @@ of the releases so far and will move with real work. For the shipped surface see
 
 ## Next
 
-### 0.3.0 - durable and shared stores (target 2026 Q3)
+### 0.3.x - shared-store guidance and sample (target 2026 Q3)
 
-Today the only shipped `IIdempotencyStore` is process-local, so multi-instance deployments must
-write their own. This milestone closes that gap.
+The durable EF Core store shipped in 0.3.0 (see Recently shipped). What remains of this theme is the
+documentation and sample that help teams take idempotency multi-instance on other backends.
 
-- A durable EF Core store (`Moongazing.OrionOnce.EntityFrameworkCore`) that persists keys, leases,
-  and captured responses, with `AcquireAsync` kept atomic through a unique key constraint plus the
-  appropriate row-locking, and `SweepAsync` implemented as a bulk delete of expired rows.
 - Written guidance for implementing `IIdempotencyStore` over a distributed backend: how to keep the
   claim atomic across nodes (for example a Redis `SET key value NX PX`), how to represent the
-  in-progress, completed, and mismatch states, and how to scope retention.
+  in-progress, completed, and mismatch states, and how to scope retention. The now-public
+  `IdempotencyLease` factory members make such an out-of-box store implementable directly.
 - A sample project showing OrionOnce against a real shared store, replacing the hand-written
   `RedisIdempotencyStore` sketch in the README with something runnable.
 

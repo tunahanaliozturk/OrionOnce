@@ -6,6 +6,52 @@ All notable changes to OrionOnce are documented in this file. The format is base
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-06-22
+
+### Added
+
+A durable EF Core idempotency store in a new package, so idempotency holds across process restarts
+and across instances sharing one database.
+
+- `OrionOnce.EntityFrameworkCore` (namespace `Moongazing.OrionOnce.EntityFrameworkCore`): an
+  `EntityFrameworkCoreIdempotencyStore<TContext>` implementing `IIdempotencyStore` over EF Core. It
+  persists each key, its in-flight lease, and the captured response, and mirrors the in-memory store
+  exactly: an entry is live only while its retention window has not elapsed, an expired entry is
+  reclaimable, completing refreshes the window, and a release drops only a still-in-flight claim and
+  never discards a stored response.
+- `AcquireAsync` is atomic without a read-then-write race. The key is the table's primary key, so the
+  first caller's insert wins the lease and a concurrent second insert for the same key is rejected by
+  the database's unique constraint. The resulting `DbUpdateException` is treated as "already in
+  flight or completed" only after re-reading the row to confirm a real collision, rather than by
+  inspecting a provider-specific SQL error code, so the package stays provider-agnostic and a
+  genuinely different failure (for example a missing table) surfaces instead of being swallowed.
+- `SweepAsync` bulk-deletes expired rows with `ExecuteDeleteAsync`, served by an index on the expiry
+  column, without loading rows or touching the change tracker.
+- `OrionOnceDbContext` and `IdempotencyEntryConfiguration` for either a dedicated context or folding
+  the table into an existing one, and `AddOrionOnceEntityFrameworkCoreStore(...)` to register the
+  store (and its `IDbContextFactory`) as the application's `IIdempotencyStore`.
+- The package references `Microsoft.EntityFrameworkCore.Relational` only and pins one EF Core major
+  per target framework (8.0.x on `net8.0`, 9.0.x on `net9.0`, 10.0.x on `net10.0`), so the consuming
+  application chooses the database provider.
+
+### Changed
+
+- The `IdempotencyLease` factory members (`Acquired`, `InProgress`, `FingerprintMismatch`, and
+  `Completed(response)`) are now `public` rather than internal, so an out-of-box `IIdempotencyStore`
+  implementation in another assembly can return them. This widens accessibility only; no signature
+  or behavior changes.
+
+### Tests
+
+A reusable `IdempotencyStoreConformanceTests` base exercises the `IIdempotencyStore` contract (first
+acquire wins, in-flight replay/conflict, response capture-and-replay, fingerprint mismatch, release
+semantics, expiry, and sweep) against a store factory, and the EF Core store is run through it over a
+real file-backed SQLite database (genuine constraints and transactions, not EF's in-memory provider).
+A dedicated concurrency test fires up to 64 parallel `AcquireAsync` calls at one key behind a barrier
+and asserts exactly one winner with the rest reported in flight, and a failure test confirms a
+non-duplicate `DbUpdateException` is surfaced rather than mistaken for a conflict. 13 new tests across
+`net8.0`, `net9.0`, and `net10.0`.
+
 ## [0.2.1] - 2026-06-20
 
 ### Performance
@@ -76,6 +122,7 @@ Initial release. HTTP idempotency for ASP.NET Core.
 25 tests across the store, the fingerprint, the middleware (replay, conflict, mismatch,
 bypass, required-key, handler failure, 5xx not cached, body limit), and registration.
 
+[0.3.0]: https://github.com/tunahanaliozturk/OrionOnce/releases/tag/v0.3.0
 [0.2.1]: https://github.com/tunahanaliozturk/OrionOnce/releases/tag/v0.2.1
 [0.2.0]: https://github.com/tunahanaliozturk/OrionOnce/releases/tag/v0.2.0
 [0.1.0]: https://github.com/tunahanaliozturk/OrionOnce/releases/tag/v0.1.0

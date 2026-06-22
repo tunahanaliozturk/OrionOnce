@@ -159,7 +159,42 @@ builder.Services.AddOrionOnce();
 ```
 
 `AcquireAsync` must be atomic so two concurrent requests with the same key cannot both be told to
-proceed. See [docs/FEATURES.md](docs/FEATURES.md) for the full store contract and lifecycle.
+proceed. The `IdempotencyLease` factory members (`IdempotencyLease.Acquired`, `.InProgress`,
+`.FingerprintMismatch`, and `.Completed(response)`) are public, so a store in your own assembly can
+return them directly. See [docs/FEATURES.md](docs/FEATURES.md) for the full store contract and
+lifecycle.
+
+### Durable EF Core store
+
+For a multi-instance deployment you do not have to hand-write the store. The
+`OrionOnce.EntityFrameworkCore` package (namespace `Moongazing.OrionOnce.EntityFrameworkCore`)
+provides a durable `IIdempotencyStore` over EF Core that persists keys, leases, and captured
+responses in your database, so a retry that lands on a different instance still replays the first
+response. `AcquireAsync` is atomic through the key's primary-key unique constraint (the first
+caller's insert wins; a concurrent second insert is rejected and resolves to in-flight or completed),
+and `SweepAsync` bulk-deletes expired rows with `ExecuteDeleteAsync`.
+
+```
+dotnet add package OrionOnce.EntityFrameworkCore
+```
+
+The package references `Microsoft.EntityFrameworkCore.Relational` only, so you choose the database
+provider:
+
+```csharp
+using Moongazing.OrionOnce.EntityFrameworkCore;
+
+builder.Services.AddOrionOnce(o => o.Retention = TimeSpan.FromHours(24));
+
+// Registers an IDbContextFactory<OrionOnceDbContext> and uses the EF Core store as the
+// IIdempotencyStore. Pick the provider here; the retention window is read from AddOrionOnce.
+builder.Services.AddOrionOnceEntityFrameworkCoreStore(
+    o => o.UseNpgsql(builder.Configuration.GetConnectionString("OrionOnce")));
+```
+
+Create the `OrionOnceIdempotencyEntries` table with an EF Core migration (or apply
+`IdempotencyEntryConfiguration` to fold the entry into a context you already own). The store pins one
+EF Core major per target framework (`8.0.x` on `net8.0`, `9.0.x` on `net9.0`, `10.0.x` on `net10.0`).
 
 ### Idempotent execution outside HTTP
 

@@ -6,29 +6,7 @@ All notable changes to OrionOnce are documented in this file. The format is base
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Security
-
-Pinned `SQLitePCLRaw.bundle_e_sqlite3` to 2.1.12 in the EF Core test project to clear
-[GHSA-2m69-gcr7-jv3q](https://github.com/advisories/GHSA-2m69-gcr7-jv3q) (High), a vulnerability in
-the bundled SQLite native library.
-
-- The advisory reaches this repository through test code only. `Microsoft.EntityFrameworkCore.Sqlite`
-  is referenced solely by `Moongazing.OrionOnce.EntityFrameworkCore.Tests`, which pulled
-  `SQLitePCLRaw.lib.e_sqlite3` 2.1.6 (`net8.0`), 2.1.10 (`net9.0`) and 2.1.11 (`net10.0`)
-  transitively via `Microsoft.Data.Sqlite` -> `SQLitePCLRaw.bundle_e_sqlite3`. Pinning the bundle
-  lifts `core`, `lib.e_sqlite3` and `provider.e_sqlite3` to the patched 2.1.12 on every target
-  framework.
-- **No shipped or released version is affected.** The `OrionOnce.EntityFrameworkCore` package
-  references `Microsoft.EntityFrameworkCore.Relational` only — it carries no SQLite provider and no
-  `SQLitePCLRaw` dependency — and no other packable project references them either. Nothing that was
-  ever published contained the vulnerable library.
-- The project-level `NU1903` suppression was removed. It had been added when no patched release
-  existed on the feed; now that 2.1.12 is published the audit passes on its own, and keeping the
-  suppression would have hidden any future advisory in this dependency.
-
-## [0.3.0] - 2026-06-22
+## [0.3.0] - 2026-07-20
 
 ### Added
 
@@ -73,6 +51,26 @@ A dedicated concurrency test fires up to 64 parallel `AcquireAsync` calls at one
 and asserts exactly one winner with the rest reported in flight, and a failure test confirms a
 non-duplicate `DbUpdateException` is surfaced rather than mistaken for a conflict. 13 new tests across
 `net8.0`, `net9.0`, and `net10.0`.
+
+### Security
+
+Pinned `SQLitePCLRaw.bundle_e_sqlite3` to 2.1.12 in the EF Core test project to clear
+[GHSA-2m69-gcr7-jv3q](https://github.com/advisories/GHSA-2m69-gcr7-jv3q) (High), a vulnerability in
+the bundled SQLite native library.
+
+- The advisory reaches this repository through test code only. `Microsoft.EntityFrameworkCore.Sqlite`
+  is referenced solely by `Moongazing.OrionOnce.EntityFrameworkCore.Tests`, which pulled
+  `SQLitePCLRaw.lib.e_sqlite3` 2.1.6 (`net8.0`), 2.1.10 (`net9.0`) and 2.1.11 (`net10.0`)
+  transitively via `Microsoft.Data.Sqlite` -> `SQLitePCLRaw.bundle_e_sqlite3`. Pinning the bundle
+  lifts `core`, `lib.e_sqlite3` and `provider.e_sqlite3` to the patched 2.1.12 on every target
+  framework.
+- **No shipped or released version is affected.** The `OrionOnce.EntityFrameworkCore` package
+  references `Microsoft.EntityFrameworkCore.Relational` only — it carries no SQLite provider and no
+  `SQLitePCLRaw` dependency — and no other packable project references them either. Nothing that was
+  ever published contained the vulnerable library.
+- The project-level `NU1903` suppression was removed. It had been added when no patched release
+  existed on the feed; now that 2.1.12 is published the audit passes on its own, and keeping the
+  suppression would have hidden any future advisory in this dependency.
 
 ## [0.2.1] - 2026-06-20
 

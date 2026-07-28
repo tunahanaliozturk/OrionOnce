@@ -6,6 +6,29 @@ All notable changes to OrionOnce are documented in this file. The format is base
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-07-28
+
+### Changed
+
+- **Converged the OpenTelemetry instrumentation onto the frozen `Orion.Abstractions` 1.0 spine.**
+  `IdempotencyDiagnostics` now derives from `OrionInstrumentation` and names its metric through
+  `OrionTelemetry`, so OrionOnce shares the family's naming and static-tag conventions. Multi-tenant
+  / multi-region labels set via `OrionInstrumentation.SetStaticTags` are stamped onto every
+  measurement, and the meter version now tracks the package version automatically (it was pinned at a
+  stale `0.2.0` literal). References `Orion.Abstractions` 1.0.0.
+
+  **Breaking (telemetry only): metric and tag names changed.** The meter name is unchanged
+  (`Moongazing.OrionOnce` — subscribers keep working). Update dashboards/alerts:
+
+  | Before | After |
+  | --- | --- |
+  | `oriononce.requests` | `orion.once.requests` |
+  | tag `outcome` | tag `orion.outcome` |
+
+  Every tag value (`acquired`/`replayed`/`in_progress`/`mismatch`/`missing_key`/`bypassed`) is
+  unchanged, as are the public `Requests` instrument, the `Record(string)` method, and the
+  `MeterName` constant.
+
 ## [0.3.0] - 2026-07-20
 
 ### Added
@@ -142,6 +165,7 @@ Initial release. HTTP idempotency for ASP.NET Core.
 25 tests across the store, the fingerprint, the middleware (replay, conflict, mismatch,
 bypass, required-key, handler failure, 5xx not cached, body limit), and registration.
 
+[0.4.0]: https://github.com/tunahanaliozturk/OrionOnce/releases/tag/v0.4.0
 [0.3.0]: https://github.com/tunahanaliozturk/OrionOnce/releases/tag/v0.3.0
 [0.2.1]: https://github.com/tunahanaliozturk/OrionOnce/releases/tag/v0.2.1
 [0.2.0]: https://github.com/tunahanaliozturk/OrionOnce/releases/tag/v0.2.0

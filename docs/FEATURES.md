@@ -109,7 +109,7 @@ It is correct for a single instance or for tests. For a multi-instance deploymen
 ## Diagnostics
 
 `IdempotencyDiagnostics` owns a `System.Diagnostics.Metrics.Meter` named `Moongazing.OrionOnce`
-(`IdempotencyDiagnostics.MeterName`) and a single counter `oriononce.requests` (unit `{request}`).
+(`IdempotencyDiagnostics.MeterName`) and a single counter `orion.once.requests` (unit `{request}`).
 Every request records exactly one outcome tag:
 
 | Outcome tag | Meaning |

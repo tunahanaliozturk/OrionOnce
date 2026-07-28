@@ -285,7 +285,7 @@ builder.Services.AddOrionOnce(o =>
 
 OrionOnce publishes metrics through `IdempotencyDiagnostics`, which owns a `Meter` named
 `Moongazing.OrionOnce` (also exposed as `IdempotencyDiagnostics.MeterName`). It defines a single
-counter, `oriononce.requests`, tagged with `outcome`:
+counter, `orion.once.requests`, tagged with `orion.outcome`:
 
 `acquired`, `replayed`, `in_progress`, `mismatch`, `missing_key`, `bypassed`.
 
@@ -321,7 +321,7 @@ dotnet run -c Release --project benchmarks/Moongazing.OrionOnce.Benchmarks
 ## Versioning
 
 OrionOnce follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Notable changes are
-recorded in [CHANGELOG.md](CHANGELOG.md). The current release is `0.3.0`; while the major version
+recorded in [CHANGELOG.md](CHANGELOG.md). The current release is `0.4.0`; while the major version
 is `0`, the public surface may still change between minor versions.
 
 ## Design notes

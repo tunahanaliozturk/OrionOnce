@@ -321,7 +321,7 @@ dotnet run -c Release --project benchmarks/Moongazing.OrionOnce.Benchmarks
 ## Versioning
 
 OrionOnce follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Notable changes are
-recorded in [CHANGELOG.md](CHANGELOG.md). The current release is `0.2.0`; while the major version
+recorded in [CHANGELOG.md](CHANGELOG.md). The current release is `0.3.0`; while the major version
 is `0`, the public surface may still change between minor versions.
 
 ## Design notes
@@ -338,6 +338,30 @@ for ideas under consideration.
 
 Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and the
 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) before opening a pull request.
+
+## More from the Orion family
+
+Focused .NET libraries built to one quality bar. Each is usable on its own; several share the small [`Orion.Abstractions`](https://github.com/tunahanaliozturk/Orion.Abstractions) contracts spine, but there is no deep dependency web — pick only what you need:
+
+- [OrionGuard](https://github.com/tunahanaliozturk/OrionGuard) — validation, guard clauses, DDD primitives, domain events
+- [Orion.Abstractions](https://github.com/tunahanaliozturk/Orion.Abstractions) — the shared contracts spine: telemetry, options, result, clock
+- [OrionAudit](https://github.com/tunahanaliozturk/OrionAudit) — automatic EF Core change-audit trail
+- [OrionBeacon](https://github.com/tunahanaliozturk/OrionBeacon) — leader election with fencing tokens
+- [OrionClock](https://github.com/tunahanaliozturk/OrionClock) — testable time, TTLs, and deadlines
+- [OrionGrant](https://github.com/tunahanaliozturk/OrionGrant) — permission / authorization checks
+- [OrionKey](https://github.com/tunahanaliozturk/OrionKey) — source-generated strongly-typed IDs
+- [OrionLedger](https://github.com/tunahanaliozturk/OrionLedger) — API-key issuance, verification, and rotation
+- [OrionLens](https://github.com/tunahanaliozturk/OrionLens) — ambient correlation-context propagation
+- [OrionLock](https://github.com/tunahanaliozturk/OrionLock) — distributed locks with fencing tokens
+- [OrionPatch](https://github.com/tunahanaliozturk/OrionPatch) — transactional outbox for EF Core
+- [OrionRelay](https://github.com/tunahanaliozturk/OrionRelay) — outbound webhook delivery (HMAC, retries, backoff)
+- [OrionResult](https://github.com/tunahanaliozturk/OrionResult) — Result/Option types and a shared error vocabulary
+- [OrionSaga](https://github.com/tunahanaliozturk/OrionSaga) — sagas / process managers for long-running workflows
+- [OrionShade](https://github.com/tunahanaliozturk/OrionShade) — sensitive-data redaction for logs and telemetry
+- [OrionStream](https://github.com/tunahanaliozturk/OrionStream) — server-sent events / streaming hub
+- [OrionVault](https://github.com/tunahanaliozturk/OrionVault) — field-level encryption for EF Core
+
+See it all working together in [OrionShowcase](https://github.com/tunahanaliozturk/OrionShowcase), a production-shaped banking sample.
 
 ## License
 

@@ -2,24 +2,27 @@ namespace Moongazing.OrionOnce.Diagnostics;
 
 using System.Diagnostics.Metrics;
 
+using Moongazing.Orion.Abstractions.Diagnostics;
+
 /// <summary>
-/// OpenTelemetry instrumentation for the idempotency middleware. Exposes a <see cref="Meter"/>
-/// named <c>Moongazing.OrionOnce</c> with a single outcome-tagged counter. Registered as a
-/// singleton; dispose it to release the meter.
+/// OpenTelemetry instrumentation for the idempotency middleware. Built on the Orion family's
+/// <see cref="OrionInstrumentation"/> spine, so it shares the family's naming and static-tag
+/// conventions: a <see cref="Meter"/> named <c>Moongazing.OrionOnce</c> (subscribe by that name)
+/// exposing the outcome-tagged counter <c>orion.once.requests</c>. Multi-tenant / multi-region
+/// labels configured through <see cref="OrionInstrumentation.SetStaticTags"/> are stamped onto every
+/// measurement. Registered as a singleton; dispose it to release the meter.
 /// </summary>
-public sealed class IdempotencyDiagnostics : IDisposable
+public sealed class IdempotencyDiagnostics : OrionInstrumentation
 {
     /// <summary>The meter name OpenTelemetry consumers subscribe to.</summary>
     public const string MeterName = "Moongazing.OrionOnce";
 
-    private readonly Meter meter;
-
     /// <summary>Create the meter and its instruments.</summary>
     public IdempotencyDiagnostics()
+        : base(OrionTelemetry.ScopeName("OrionOnce"), MeterVersion.Value)
     {
-        meter = new Meter(MeterName, "0.2.0");
-        Requests = meter.CreateCounter<long>(
-            "oriononce.requests",
+        Requests = Meter.CreateCounter<long>(
+            OrionTelemetry.MetricName("once", "requests"),
             unit: "{request}",
             description: "Requests seen by the idempotency middleware, tagged outcome "
                 + "(acquired/replayed/in_progress/mismatch/missing_key/bypassed).");
@@ -31,8 +34,5 @@ public sealed class IdempotencyDiagnostics : IDisposable
     /// <summary>Record one request outcome.</summary>
     /// <param name="outcome">The outcome tag value.</param>
     public void Record(string outcome) =>
-        Requests.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
-
-    /// <inheritdoc />
-    public void Dispose() => meter.Dispose();
+        Requests.Add(1, Tag(new KeyValuePair<string, object?>(OrionTelemetry.Tags.Outcome, outcome)));
 }

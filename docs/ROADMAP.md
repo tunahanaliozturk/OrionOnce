@@ -71,7 +71,7 @@ consumers and improves what operators can see.
 - Thin helpers for deriving a key and fingerprint from a message (delivery id or a caller-supplied
   business key plus the payload), so a RabbitMQ or similar consumer can guard a handler without
   hand-rolling the plumbing each time.
-- Richer telemetry alongside the existing `oriononce.requests` counter: a replay-versus-execute
+- Richer telemetry alongside the existing `orion.once.requests` counter: a replay-versus-execute
   latency histogram and optional `ActivitySource` spans for the acquire and replay paths, so a
   duplicate that was replayed is visible in a trace.
 - Per-endpoint or attribute-based opt-in/opt-out for the middleware, so idempotency can be scoped

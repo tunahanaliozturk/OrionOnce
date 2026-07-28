@@ -2,6 +2,7 @@ namespace Moongazing.OrionOnce.Tests;
 
 using System.Diagnostics.Metrics;
 
+using Moongazing.Orion.Abstractions.Diagnostics;
 using Moongazing.OrionOnce.Diagnostics;
 
 using Xunit;
@@ -69,7 +70,7 @@ public sealed class IdempotencyDiagnosticsTests
             string? outcome = null;
             foreach (var tag in tags)
             {
-                if (tag.Key == "outcome")
+                if (tag.Key == OrionTelemetry.Tags.Outcome)
                 {
                     outcome = tag.Value as string;
                 }

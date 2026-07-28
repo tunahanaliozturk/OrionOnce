@@ -74,7 +74,7 @@ cannot both be told to proceed.
 ## Telemetry
 
 Subscribe to the `Moongazing.OrionOnce` meter. The `orion.once.requests` counter is tagged with
-`outcome`: `acquired`, `replayed`, `in_progress`, `mismatch`, `missing_key`, or `bypassed`.
+`orion.outcome`: `acquired`, `replayed`, `in_progress`, `mismatch`, `missing_key`, or `bypassed`.
 
 ## Design
 

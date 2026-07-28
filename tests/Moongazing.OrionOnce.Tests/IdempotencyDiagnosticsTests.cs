@@ -70,7 +70,9 @@ public sealed class IdempotencyDiagnosticsTests
             string? outcome = null;
             foreach (var tag in tags)
             {
-                if (tag.Key == OrionTelemetry.Tags.Outcome)
+                // Assert the literal wire-level tag key, so a regression in the shared
+                // OrionTelemetry.Tags.Outcome constant is still caught here.
+                if (tag.Key == "orion.outcome")
                 {
                     outcome = tag.Value as string;
                 }

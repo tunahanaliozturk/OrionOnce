@@ -151,11 +151,15 @@ store over EF Core that creates a short-lived context per call from an `IDbConte
   (max length 256), `Fingerprint` is required (max length 256), plus `IsCompleted`, `StatusCode`,
   `ContentType`, `Body` and `ExpiresAtTicks`, which is indexed. `OrionOnceDbContext` applies it; apply
   it to your own context to fold the table in. The store does not create the table; add a migration.
-- **Atomic claim.** `AcquireAsync` inserts the row (or reclaims an expired one in place). A concurrent
+- **Claim.** `AcquireAsync` inserts the row (or reclaims an expired one in place). A concurrent
   insert of the same key fails on the primary key; the store then re-reads the row on a clean context
   and reports the state of the winner (`InProgress`, `AlreadyCompleted` or `FingerprintMismatch`). If
   no row is there, the failure was something else and it is surfaced instead of being reported as a
   conflict.
+- **Expired-row reclaim is not atomic.** Reclaiming an expired row is an ordinary `UPDATE` with no
+  concurrency token and no expiry predicate, so two callers that read the same expired row at the
+  same moment both save and both get `Acquired`. The primary key protects only concurrent inserts.
+  Running `SweepAsync` often narrows the window, because a swept key is claimed by insert again.
 - **Release and sweep.** `ReleaseAsync` deletes the row only while it is not completed. `SweepAsync`
   bulk-deletes rows with `ExpiresAtTicks <= now` through `ExecuteDeleteAsync`.
 - **Registration.** `AddOrionOnceEntityFrameworkCoreStore(configureDbContext, retention)` registers

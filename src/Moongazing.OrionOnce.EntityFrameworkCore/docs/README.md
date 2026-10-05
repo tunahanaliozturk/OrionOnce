@@ -46,8 +46,9 @@ builder.Services.AddOrionOnceEntityFrameworkCoreStore<AppDbContext>(
 
 ## Behaviour
 
-- `AcquireAsync` is atomic through the primary key on `Key`: the first insert wins. A concurrent insert of the same key fails, the row is re-read, and the caller gets `InProgress`, `AlreadyCompleted` or `FingerprintMismatch`. A failure that is not a duplicate key (for example a missing table) is surfaced, not reported as a conflict.
-- An expired row is reclaimed in place by the next `AcquireAsync`. `CompleteAsync` stores the response and restarts the retention window.
+- A new key is claimed atomically through the primary key on `Key`: the first insert wins. A concurrent insert of the same key fails, the row is re-read, and the caller gets `InProgress`, `AlreadyCompleted` or `FingerprintMismatch`. A failure that is not a duplicate key (for example a missing table) is surfaced, not reported as a conflict.
+- An expired row is reclaimed in place by the next `AcquireAsync` with a plain `UPDATE`. That update has no concurrency token and no expiry check, so two callers that reclaim the same expired key at the same moment can both get `Acquired` and both run the handler. Only inserts of a new key are protected. Running `SweepAsync` often makes this window smaller, because a swept key is inserted again rather than reclaimed.
+- `CompleteAsync` stores the response and restarts the retention window.
 - `ReleaseAsync` deletes a row only while it is still in flight; a stored response is never discarded.
 - `SweepAsync` bulk-deletes expired rows with `ExecuteDeleteAsync`, served by the index on `ExpiresAtTicks`. Run it periodically.
 - Each call creates a short-lived context from the factory, so the singleton store is safe under concurrent requests.

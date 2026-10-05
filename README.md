@@ -192,9 +192,11 @@ For a multi-instance deployment you do not have to hand-write the store. The
 `OrionOnce.EntityFrameworkCore` package (namespace `Moongazing.OrionOnce.EntityFrameworkCore`)
 provides a durable `IIdempotencyStore` over EF Core that persists keys, leases, and captured
 responses in your database, so a retry that lands on a different instance still replays the first
-response. `AcquireAsync` is atomic through the key's primary-key unique constraint (the first
-caller's insert wins; a concurrent second insert is rejected and resolves to in-flight or completed),
-and `SweepAsync` bulk-deletes expired rows with `ExecuteDeleteAsync`.
+response. Claiming a new key is atomic through the key's primary-key unique constraint (the first
+caller's insert wins; a concurrent second insert is rejected and resolves to in-flight or completed).
+An expired row is reclaimed with a plain `UPDATE` that has no concurrency check, so two callers
+reclaiming the same expired key at the same moment can both be told to proceed. `SweepAsync`
+bulk-deletes expired rows with `ExecuteDeleteAsync`; running it often keeps that window small.
 
 ```
 dotnet add package OrionOnce.EntityFrameworkCore

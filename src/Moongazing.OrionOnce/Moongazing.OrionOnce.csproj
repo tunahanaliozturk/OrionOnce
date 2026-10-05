@@ -4,6 +4,7 @@
     <RootNamespace>Moongazing.OrionOnce</RootNamespace>
     <Description>HTTP idempotency for ASP.NET Core: an Idempotency-Key middleware that replays the stored response for retried requests, rejects in-flight duplicates, and detects key reuse with a different request body.</Description>
     <PackageTags>idempotency;idempotency-key;aspnetcore;middleware;http;orion</PackageTags>
+    <PackageReadmeFile>docs/README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
@@ -11,5 +12,8 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Moongazing.OrionOnce.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="docs/README.md" Pack="true" PackagePath="docs/" />
   </ItemGroup>
 </Project>

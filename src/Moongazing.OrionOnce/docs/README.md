@@ -1,88 +1,96 @@
 # OrionOnce
 
-[![CI/CD](https://github.com/tunahanaliozturk/OrionOnce/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/tunahanaliozturk/OrionOnce/actions/workflows/ci-cd.yml)
-[![NuGet](https://img.shields.io/nuget/v/OrionOnce.svg)](https://www.nuget.org/packages/OrionOnce/)
+HTTP idempotency for ASP.NET Core: a client sends an `Idempotency-Key`, and a retry with the same key gets the first response replayed instead of running your handler a second time. `IdempotentExecutor` gives the same guarantee to queue consumers and jobs.
 
-HTTP idempotency for ASP.NET Core. A client sends an `Idempotency-Key` with a request; if the
-same key arrives again, OrionOnce replays the first response instead of running your handler a
-second time. Retries stop double-charging, double-shipping, and double-posting.
-
-Part of the **Orion** family. Usable entirely on its own.
-
-## Why
-
-Networks drop responses, clients retry, and load balancers replay. Without idempotency a retried
-`POST /payments` charges twice. The fix is well understood (key the request, cache the response,
-replay on repeat) but fiddly to get right: you have to buffer the body, detect a key reused for a
-different request, reject duplicates that are still in flight, and avoid caching transient
-failures. OrionOnce does those four things.
+![How the OrionOnce middleware handles a request: method, key and body-size gates, an atomic AcquireAsync claim, then replay, 409, 422 or running the handler once; a thrown handler or a 5xx releases the key](https://raw.githubusercontent.com/tunahanaliozturk/OrionOnce/main/docs/diagrams/middleware-flow.png)
 
 ## Install
 
-```
-dotnet add package OrionOnce
-```
+    dotnet add package OrionOnce
 
 ## Quick start
 
 ```csharp
+using Moongazing.OrionOnce;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddControllers();
 builder.Services.AddOrionOnce(o =>
 {
     o.Retention = TimeSpan.FromHours(24);
-    o.RequireKey = false;                 // set true to make the key mandatory on guarded methods
+    o.RequireKey = false;                 // true: a guarded request without a key gets 400
 });
 
 var app = builder.Build();
+
 app.UseRouting();
 app.UseOrionOnce();                        // after routing, before your endpoints
 app.MapControllers();
+
+app.Run();
 ```
 
-A client then retries safely:
+A client retries `POST /payments` with `Idempotency-Key: 3f1c...`: the first call runs the handler and caches its response; every retry gets the same status, content type and body back with `Idempotency-Replayed: true`.
 
-```
-POST /payments
-Idempotency-Key: 3f1c9b8a-...
-
-# first call  -> handler runs, 201 created, response cached
-# retry       -> handler skipped, the same 201 replayed with "Idempotency-Replayed: true"
-```
-
-## Behaviour
+## Outcomes
 
 | Situation | Result |
 |-----------|--------|
 | Key not seen before | Handler runs once; its response is cached |
-| Same key, same request, already completed | Stored response replayed, `Idempotency-Replayed: true` |
-| Same key, request still in flight | `409 Conflict` (no second execution) |
-| Same key, different request body | `422 Unprocessable Entity` |
+| Same key and request, already completed | Stored response replayed, `Idempotency-Replayed: true` |
+| Same key, request still in flight | `409 Conflict` |
+| Same key, different method, path, query or body | `422 Unprocessable Entity` |
 | Guarded method, no key, `RequireKey = true` | `400 Bad Request` |
-| Handler throws or returns `5xx` | Key released, not cached, so the client can retry |
+| Guarded method, no key, `RequireKey = false` | Bypassed, handled normally |
+| Handler throws or returns `5xx` | Key released, nothing cached, the client can retry |
 | Body larger than `MaxBodyBytes` | `413 Payload Too Large` |
 
-Only `POST`, `PUT`, `PATCH`, and `DELETE` are guarded by default (configurable via `Methods`);
-safe methods need no protection.
+Other response headers are not captured or replayed.
 
-## Storage
+## Options
 
-The default store is an in-process `InMemoryIdempotencyStore`, which is correct for a single
-instance. For a multi-instance deployment, implement `IIdempotencyStore` over Redis or a database
-and register it before `AddOrionOnce()`; the in-memory store is only added if none is present.
-Implementations must make `AcquireAsync` atomic so two concurrent requests with the same key
-cannot both be told to proceed.
+`IdempotencyOptions`, validated inside `AddOrionOnce` (an invalid value throws there):
 
-## Telemetry
+- `HeaderName` - the request header carrying the key; must not be empty. Default `Idempotency-Key`.
+- `Retention` - how long a captured response is kept for replay; positive. Default 24 hours.
+- `Methods` - guarded HTTP methods, case-insensitive and mutable. Default `POST`, `PUT`, `PATCH`, `DELETE`.
+- `RequireKey` - reject a guarded request without a key with `400`. Default `false`.
+- `MaxBodyBytes` - largest buffered request body; positive. Default 1 MiB.
 
-Subscribe to the `Moongazing.OrionOnce` meter. The `orion.once.requests` counter is tagged with
-`orion.outcome`: `acquired`, `replayed`, `in_progress`, `mismatch`, `missing_key`, or `bypassed`.
+## Outside HTTP
 
-## Design
+```csharp
+using System.Text.Json;
+using Moongazing.OrionOnce;
+using Moongazing.OrionOnce.Storage;
 
-- Multi-targets `net8.0`, `net9.0`, `net10.0`.
-- `TreatWarningsAsErrors`, latest analyzers, nullable enabled.
-- Response capture replays the status, content type, and body. Other response headers are not
-  replayed in this version.
+var executor = new IdempotentExecutor(store);   // any IIdempotencyStore
+var codec = new DelegateResultCodec<Receipt>(
+    serialize: receipt => JsonSerializer.SerializeToUtf8Bytes(receipt),
+    deserialize: payload => JsonSerializer.Deserialize<Receipt>(payload)!,
+    contentType: "application/json");
 
-## License
+string fingerprint = RequestFingerprint.Compute("charge", message.OrderId, message.Body);
+Receipt receipt = await executor.ExecuteAsync(
+    message.IdempotencyKey, fingerprint, ct => ChargeAsync(message, ct), codec, cancellationToken);
+```
 
-MIT.
+A completed key replays the stored result. A key still in flight or reused with a different fingerprint throws `IdempotentExecutionException` with its `Outcome`. A failed operation releases the key and its exception propagates unchanged.
+
+## Storage and telemetry
+
+- The default `InMemoryIdempotencyStore` is process-local. For more than one instance, install `OrionOnce.EntityFrameworkCore` or register your own `IIdempotencyStore`; `AddOrionOnce` adds the in-memory store only when none is registered. `AcquireAsync` must be atomic.
+- `IIdempotencyStore.SweepAsync` removes expired entries; run it periodically against the in-memory store, which otherwise evicts only on access.
+- Meter `Moongazing.OrionOnce` (`IdempotencyDiagnostics.MeterName`): counter `orion.once.requests`, tag `orion.outcome` = `acquired`, `replayed`, `in_progress`, `mismatch`, `missing_key` or `bypassed`. Built on `OrionInstrumentation` from `Orion.Abstractions`.
+- Targets net8.0, net9.0 and net10.0. A NativeAOT publish of the in-memory store is smoke-tested in CI.
+
+## Related packages
+
+- `OrionOnce.EntityFrameworkCore` - durable `IIdempotencyStore` over EF Core, shared across instances.
+
+## Links
+
+- Documentation and full README: https://github.com/tunahanaliozturk/OrionOnce
+- Changelog: https://github.com/tunahanaliozturk/OrionOnce/blob/main/CHANGELOG.md
+- License: MIT

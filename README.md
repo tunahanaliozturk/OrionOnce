@@ -1,11 +1,16 @@
 <p align="center">
-  <img src="docs/logo.png" alt="OrionOnce" width="150" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo.png">
+    <img src="docs/icon.png" alt="OrionOnce logo" width="150">
+  </picture>
 </p>
 
 # OrionOnce
 
 [![CI/CD](https://github.com/tunahanaliozturk/OrionOnce/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/tunahanaliozturk/OrionOnce/actions/workflows/ci-cd.yml)
 [![NuGet](https://img.shields.io/nuget/v/OrionOnce.svg)](https://www.nuget.org/packages/OrionOnce/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
+![.NET](https://img.shields.io/badge/.NET-8.0%20%7C%209.0%20%7C%2010.0-purple.svg)
 
 HTTP idempotency for ASP.NET Core. A client sends an `Idempotency-Key` with a request; if the
 same key arrives again, OrionOnce replays the first response instead of running your handler a
@@ -41,10 +46,20 @@ failures. OrionOnce does those four things.
 - **OpenTelemetry metrics** through a `Moongazing.OrionOnce` meter with an outcome-tagged counter.
 - **Multi-targeted** for `net8.0`, `net9.0`, and `net10.0`, nullable-enabled, warnings-as-errors.
 
+## Packages
+
+![OrionOnce packages: HTTP clients reach the core through IdempotencyMiddleware and queue consumers through IdempotentExecutor; both use IIdempotencyStore, which OrionOnce.EntityFrameworkCore implements over a relational database](docs/diagrams/overview.png)
+
+| Package | What it is |
+|---------|------------|
+| [`OrionOnce`](https://www.nuget.org/packages/OrionOnce/) | The core: `IdempotencyMiddleware` (`AddOrionOnce()` / `UseOrionOnce()`), `IdempotentExecutor`, `RequestFingerprint`, `IdempotencyOptions`, the `IIdempotencyStore` seam with `InMemoryIdempotencyStore`, and `IdempotencyDiagnostics`. |
+| [`OrionOnce.EntityFrameworkCore`](https://www.nuget.org/packages/OrionOnce.EntityFrameworkCore/) | `EntityFrameworkCoreIdempotencyStore<TContext>`, `OrionOnceDbContext` and `IdempotencyEntryConfiguration`, registered with `AddOrionOnceEntityFrameworkCoreStore()`. |
+
 ## Install
 
 ```
 dotnet add package OrionOnce
+dotnet add package OrionOnce.EntityFrameworkCore   # optional: durable EF Core store
 ```
 
 The package id is `OrionOnce`; the root namespace is `Moongazing.OrionOnce`.
@@ -58,6 +73,7 @@ using Moongazing.OrionOnce;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddControllers();
 builder.Services.AddOrionOnce(o =>
 {
     o.Retention = TimeSpan.FromHours(24);
@@ -102,6 +118,12 @@ The middleware resolves every guarded request carrying a key to exactly one of t
 | Guarded method, no key, `RequireKey = false` | Bypassed; handled normally |
 | Handler throws or returns `5xx` | Key released, not cached, so the client can retry |
 | Body larger than `MaxBodyBytes` | `413 Payload Too Large` |
+
+![OrionOnce middleware flow: the method, key and body-size gates, the atomic AcquireAsync claim, then replay, 409, 422 or running the handler once; a thrown handler or a 5xx releases the key, anything else is stored with CompleteAsync](docs/diagrams/middleware-flow.png)
+
+The same key over time, with a concurrent duplicate, a `5xx` and two retries:
+
+![OrionOnce concurrent duplicates and retries: a duplicate that arrives while the first request runs gets 409, a 5xx releases the key so the retry runs the handler again, and a later retry replays the stored 201 with Idempotency-Replayed](docs/diagrams/retry-and-duplicates.png)
 
 ### Fingerprint scope
 
@@ -292,6 +314,8 @@ counter, `orion.once.requests`, tagged with `orion.outcome`:
 Subscribe to the meter from OpenTelemetry:
 
 ```csharp
+using Moongazing.OrionOnce.Diagnostics;
+
 builder.Services.AddOpenTelemetry()
     .WithMetrics(m => m.AddMeter(IdempotencyDiagnostics.MeterName));
 ```
@@ -301,9 +325,13 @@ The replayed response also carries the `Idempotency-Replayed: true` header
 
 ## Testing
 
-The library is covered by an xUnit suite under `tests/Moongazing.OrionOnce.Tests` spanning the
+The core is covered by an xUnit suite under `tests/Moongazing.OrionOnce.Tests` spanning the
 store, the fingerprint, the middleware (replay, conflict, mismatch, bypass, required-key, handler
-failure, `5xx` not cached, body limit), and registration.
+failure, `5xx` not cached, body limit), the executor, the codec, sweep, telemetry, and registration.
+`tests/Moongazing.OrionOnce.EntityFrameworkCore.Tests` runs the EF Core store through a reusable
+`IIdempotencyStore` conformance suite over a real file-backed SQLite database, plus a parallel-acquire
+concurrency test that asserts exactly one winner. `tests/Moongazing.OrionOnce.AotSmoke` is published
+with NativeAOT in CI and must build with zero trim/AOT warnings.
 
 ```
 dotnet test
@@ -327,7 +355,7 @@ is `0`, the public surface may still change between minor versions.
 ## Design notes
 
 - Multi-targets `net8.0`, `net9.0`, `net10.0`.
-- `TreatWarningsAsErrors`, latest analyzers, nullable enabled.
+- `TreatWarningsAsErrors`, `latest-recommended` analyzers, nullable enabled.
 - Response capture replays the status, content type, and body. Other response headers are not
   replayed in this version.
 
@@ -337,7 +365,8 @@ for ideas under consideration.
 ## Contributing
 
 Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and the
-[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) before opening a pull request.
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) before opening a pull request. Report a vulnerability
+privately as described in [SECURITY.md](SECURITY.md).
 
 ## More from the Orion family
 

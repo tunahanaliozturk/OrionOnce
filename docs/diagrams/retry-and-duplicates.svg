@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1438" viewBox="0 0 1200 1438">
+  <!--
+    Orion family diagram template. Copy it, keep <defs> and <style>, replace the body.
+    Classes: .step (our code) .ext (backend / external system) .ok (success end) .fail (failure path)
+             .decision (diamond) .note (side remark) .lane (sequence lifeline)
+    Arrows: class="flow" (main path), "flow alt" (alternate / failure path, dashed), "flow back" (response).
+  -->
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrow-fail" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#dc2626"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: "Segoe UI", Inter, "Helvetica Neue", Arial, sans-serif; fill: #1e1b4b; }
+    .title { font-size: 24px; font-weight: 700; }
+    .subtitle { font-size: 14px; fill: #475569; }
+    .label { font-size: 15px; font-weight: 600; }
+    .small { font-size: 12.5px; fill: #475569; }
+    .code { font-family: "Cascadia Code", Consolas, "SF Mono", monospace; font-size: 13px; fill: #3730a3; }
+    .edge { font-size: 12.5px; fill: #334155; }
+    .step { fill: #eef2ff; stroke: #4f46e5; stroke-width: 2; }
+    .ext { fill: #f0f9ff; stroke: #0284c7; stroke-width: 2; }
+    .ok { fill: #ecfdf5; stroke: #059669; stroke-width: 2; }
+    .fail { fill: #fef2f2; stroke: #dc2626; stroke-width: 2; }
+    .decision { fill: #fffbeb; stroke: #d97706; stroke-width: 2; }
+    .note { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.5; stroke-dasharray: 4 3; }
+    .lane { stroke: #cbd5e1; stroke-width: 1.5; stroke-dasharray: 6 5; }
+    .flow { fill: none; stroke: #64748b; stroke-width: 2; marker-end: url(#arrow); }
+    .flow.alt { stroke: #dc2626; stroke-dasharray: 6 4; marker-end: url(#arrow-fail); }
+    .flow.back { stroke-dasharray: 6 4; }
+    .badge { fill: #4f46e5; }
+    .badge-text { font-size: 12px; font-weight: 700; fill: #ffffff; }
+  </style>
+  <rect width="1200" height="1438" fill="#ffffff"/>
+
+  <text class="title" x="40" y="52">OrionOnce - concurrent duplicates and retries under one key</text>
+  <text class="subtitle" x="40" y="78">One Idempotency-Key K, two clients. The store decides every outcome atomically in AcquireAsync.</text>
+
+  <rect class="ext" x="35" y="105" width="170" height="50" rx="12"/>
+  <text class="label" x="120" y="135" text-anchor="middle">Client A</text>
+  <line class="lane" x1="120" y1="155" x2="120" y2="1322"/>
+  <rect class="ext" x="235" y="105" width="170" height="50" rx="12"/>
+  <text class="label" x="320" y="127" text-anchor="middle">Client B</text>
+  <text class="small" x="320" y="145" text-anchor="middle">same key K</text>
+  <line class="lane" x1="320" y1="155" x2="320" y2="1322"/>
+  <rect class="step" x="462" y="105" width="196" height="50" rx="12"/>
+  <text class="code" x="560" y="135" text-anchor="middle">IdempotencyMiddleware</text>
+  <line class="lane" x1="560" y1="155" x2="560" y2="1322"/>
+  <rect class="step" x="715" y="105" width="170" height="50" rx="12"/>
+  <text class="label" x="800" y="135" text-anchor="middle">Your handler</text>
+  <line class="lane" x1="800" y1="155" x2="800" y2="1322"/>
+  <rect class="ext" x="955" y="105" width="170" height="50" rx="12"/>
+  <text class="code" x="1040" y="135" text-anchor="middle">IIdempotencyStore</text>
+  <line class="lane" x1="1040" y1="155" x2="1040" y2="1322"/>
+
+  <rect class="note" x="40" y="180" width="1120" height="26" rx="6"/>
+  <text class="small" x="56" y="198" style="font-weight: 600">1. First request claims the key</text>
+  <circle class="badge" cx="52" cy="242" r="11"/>
+  <text class="badge-text" x="52" y="246" text-anchor="middle">1</text>
+  <path class="flow" d="M120,242 L558,242"/>
+  <text class="edge" x="334" y="234">POST, Idempotency-Key: K</text>
+  <circle class="badge" cx="52" cy="280" r="11"/>
+  <text class="badge-text" x="52" y="284" text-anchor="middle">2</text>
+  <path class="flow" d="M560,280 L1038,280"/>
+  <text class="code" x="574" y="272">AcquireAsync(K, fp)</text>
+  <circle class="badge" cx="52" cy="318" r="11"/>
+  <text class="badge-text" x="52" y="322" text-anchor="middle">3</text>
+  <path class="flow back" d="M1040,318 L562,318"/>
+  <text class="code" x="588" y="310">Acquired</text>
+  <circle class="badge" cx="52" cy="356" r="11"/>
+  <text class="badge-text" x="52" y="360" text-anchor="middle">4</text>
+  <path class="flow" d="M560,356 L798,356"/>
+  <text class="code" x="574" y="348">next(context)</text>
+  <rect class="note" x="40" y="394" width="1120" height="26" rx="6"/>
+  <text class="small" x="56" y="412" style="font-weight: 600">2. A duplicate arrives while the handler still runs</text>
+  <circle class="badge" cx="52" cy="456" r="11"/>
+  <text class="badge-text" x="52" y="460" text-anchor="middle">5</text>
+  <path class="flow" d="M320,456 L558,456"/>
+  <text class="edge" x="334" y="448">same request, key K</text>
+  <circle class="badge" cx="52" cy="494" r="11"/>
+  <text class="badge-text" x="52" y="498" text-anchor="middle">6</text>
+  <path class="flow" d="M560,494 L1038,494"/>
+  <text class="code" x="574" y="486">AcquireAsync(K, fp)</text>
+  <circle class="badge" cx="52" cy="532" r="11"/>
+  <text class="badge-text" x="52" y="536" text-anchor="middle">7</text>
+  <path class="flow back" d="M1040,532 L562,532"/>
+  <text class="code" x="588" y="524">InProgress</text>
+  <circle class="badge" cx="52" cy="570" r="11"/>
+  <text class="badge-text" x="52" y="574" text-anchor="middle">8</text>
+  <path class="flow alt" d="M560,570 L322,570"/>
+  <text class="edge" x="348" y="562">409 Conflict</text>
+  <rect class="note" x="40" y="608" width="1120" height="26" rx="6"/>
+  <text class="small" x="56" y="626" style="font-weight: 600">3. The handler returns a 5xx: nothing is cached and the key is released</text>
+  <circle class="badge" cx="52" cy="670" r="11"/>
+  <text class="badge-text" x="52" y="674" text-anchor="middle">9</text>
+  <path class="flow back" d="M800,670 L562,670"/>
+  <text class="edge" x="588" y="662">503 Service Unavailable</text>
+  <circle class="badge" cx="52" cy="708" r="11"/>
+  <text class="badge-text" x="52" y="712" text-anchor="middle">10</text>
+  <path class="flow alt" d="M560,708 L122,708"/>
+  <text class="edge" x="334" y="700">503 written, not cached</text>
+  <circle class="badge" cx="52" cy="746" r="11"/>
+  <text class="badge-text" x="52" y="750" text-anchor="middle">11</text>
+  <path class="flow" d="M560,746 L1038,746"/>
+  <text class="code" x="574" y="738">ReleaseAsync(K)</text>
+  <rect class="note" x="40" y="784" width="1120" height="26" rx="6"/>
+  <text class="small" x="56" y="802" style="font-weight: 600">4. Client A retries with the same key: the handler runs again and the response is stored</text>
+  <circle class="badge" cx="52" cy="846" r="11"/>
+  <text class="badge-text" x="52" y="850" text-anchor="middle">12</text>
+  <path class="flow" d="M120,846 L558,846"/>
+  <text class="edge" x="334" y="838">retry, Idempotency-Key: K</text>
+  <circle class="badge" cx="52" cy="884" r="11"/>
+  <text class="badge-text" x="52" y="888" text-anchor="middle">13</text>
+  <path class="flow" d="M560,884 L1038,884"/>
+  <text class="code" x="574" y="876">AcquireAsync(K, fp)</text>
+  <circle class="badge" cx="52" cy="922" r="11"/>
+  <text class="badge-text" x="52" y="926" text-anchor="middle">14</text>
+  <path class="flow back" d="M1040,922 L562,922"/>
+  <text class="code" x="588" y="914">Acquired</text>
+  <circle class="badge" cx="52" cy="960" r="11"/>
+  <text class="badge-text" x="52" y="964" text-anchor="middle">15</text>
+  <path class="flow" d="M560,960 L798,960"/>
+  <text class="code" x="574" y="952">next(context)</text>
+  <circle class="badge" cx="52" cy="998" r="11"/>
+  <text class="badge-text" x="52" y="1002" text-anchor="middle">16</text>
+  <path class="flow back" d="M800,998 L562,998"/>
+  <text class="edge" x="588" y="990">201 Created</text>
+  <circle class="badge" cx="52" cy="1036" r="11"/>
+  <text class="badge-text" x="52" y="1040" text-anchor="middle">17</text>
+  <path class="flow back" d="M560,1036 L122,1036"/>
+  <text class="edge" x="334" y="1028">201 Created</text>
+  <circle class="badge" cx="52" cy="1074" r="11"/>
+  <text class="badge-text" x="52" y="1078" text-anchor="middle">18</text>
+  <path class="flow" d="M560,1074 L1038,1074"/>
+  <text class="code" x="574" y="1066">CompleteAsync(K, response)</text>
+  <rect class="note" x="40" y="1112" width="1120" height="26" rx="6"/>
+  <text class="small" x="56" y="1130" style="font-weight: 600">5. Client B retries: the stored response is replayed, the handler is not called</text>
+  <circle class="badge" cx="52" cy="1174" r="11"/>
+  <text class="badge-text" x="52" y="1178" text-anchor="middle">19</text>
+  <path class="flow" d="M320,1174 L558,1174"/>
+  <text class="edge" x="334" y="1166">retry, key K</text>
+  <circle class="badge" cx="52" cy="1212" r="11"/>
+  <text class="badge-text" x="52" y="1216" text-anchor="middle">20</text>
+  <path class="flow" d="M560,1212 L1038,1212"/>
+  <text class="code" x="574" y="1204">AcquireAsync(K, fp)</text>
+  <circle class="badge" cx="52" cy="1250" r="11"/>
+  <text class="badge-text" x="52" y="1254" text-anchor="middle">21</text>
+  <path class="flow back" d="M1040,1250 L562,1250"/>
+  <text class="code" x="588" y="1242">AlreadyCompleted + response</text>
+  <circle class="badge" cx="52" cy="1288" r="11"/>
+  <text class="badge-text" x="52" y="1292" text-anchor="middle">22</text>
+  <path class="flow back" d="M560,1288 L322,1288"/>
+  <text class="edge" x="348" y="1280">201 + Idempotency-Replayed</text>
+
+  <rect class="note" x="40" y="1342" width="1120" height="66" rx="10"/>
+  <text class="small" x="56" y="1368">A key reused with a different method, path, query or body gets FingerprintMismatch (422). Entries expire after Retention (default 24 hours).</text>
+  <text class="small" x="56" y="1390">IdempotentExecutor.ExecuteAsync follows the same steps outside HTTP: InProgress and FingerprintMismatch throw IdempotentExecutionException.</text>
+</svg>

@@ -1,8 +1,10 @@
 # OrionOnce roadmap
 
-Current version: **0.3.0**. OrionOnce is an idempotency library for .NET: idempotency keys, request
-fingerprinting, a pluggable idempotency store, ASP.NET Core middleware that replays a captured HTTP
-response, and an `IdempotentExecutor` that runs an operation once and replays its typed result.
+Current version: **0.4.0**. OrionOnce is an idempotency library for .NET: idempotency keys, request
+fingerprinting, a pluggable idempotency store with a durable EF Core implementation, ASP.NET Core
+middleware that replays a captured HTTP response, and an `IdempotentExecutor` that runs an operation
+once and replays its typed result. Telemetry follows the family conventions of `Orion.Abstractions`
+1.0.
 
 The plan below is grounded in the current code, not a wish list. Version milestones are targets, not
 commitments; anything listed may change, ship differently, or be dropped. Dates assume the cadence
@@ -12,7 +14,13 @@ of the releases so far and will move with real work. For the shipped surface see
 
 ## Recently shipped
 
-- **0.3.0 (2026-06-22)** Durable EF Core store. `Moongazing.OrionOnce.EntityFrameworkCore`
+- **0.4.0 (2026-07-28)** Orion.Abstractions telemetry spine. `IdempotencyDiagnostics` derives from
+  `OrionInstrumentation` and names its counter through `OrionTelemetry`, so static tags set with
+  `SetStaticTags` reach every measurement and the meter version tracks the package version. Breaking
+  for dashboards only: the counter moved from `oriononce.requests` to `orion.once.requests` and the
+  tag from `outcome` to `orion.outcome`; the meter name `Moongazing.OrionOnce` and the tag values are
+  unchanged.
+- **0.3.0 (2026-07-20)** Durable EF Core store. `Moongazing.OrionOnce.EntityFrameworkCore`
   (package id `OrionOnce.EntityFrameworkCore`) adds `EntityFrameworkCoreIdempotencyStore<TContext>`,
   an `IIdempotencyStore` over EF Core that persists keys, leases, and captured responses across
   instances. `AcquireAsync` stays atomic through the key's primary-key unique constraint
@@ -39,7 +47,7 @@ of the releases so far and will move with real work. For the shipped surface see
 
 ## Next
 
-### 0.3.x - shared-store guidance and sample (target 2026 Q3)
+### Shared-store guidance and sample (no date set)
 
 The durable EF Core store shipped in 0.3.0 (see Recently shipped). What remains of this theme is the
 documentation and sample that help teams take idempotency multi-instance on other backends.
@@ -51,7 +59,7 @@ documentation and sample that help teams take idempotency multi-instance on othe
 - A sample project showing OrionOnce against a real shared store, replacing the hand-written
   `RedisIdempotencyStore` sketch in the README with something runnable.
 
-### 0.4.0 - response fidelity and policy (target 2026 Q4)
+### Response fidelity and policy (next minor, no date set)
 
 The middleware currently replays status, content type, and body, and treats anything below `5xx` as
 cacheable. Both are reasonable defaults that some applications need to override.
@@ -63,7 +71,7 @@ cacheable. Both are reasonable defaults that some applications need to override.
 - Configurable fingerprint scope, letting an application include or exclude the query string or
   selected headers when its notion of "the same request" differs from method + path + body.
 
-### 0.5.0 - message-consumer ergonomics and observability (target 2027 Q1)
+### Message-consumer ergonomics and observability (target 2027 Q1)
 
 `IdempotentExecutor` already covers non-HTTP retries; this milestone makes it idiomatic for queue
 consumers and improves what operators can see.

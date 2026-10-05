@@ -22,7 +22,7 @@ dotnet build -c Release
 dotnet test
 ```
 
-.NET 8 SDK is required. Multi-target builds may need 9.0 / 10.0 SDKs installed; the multi-target dimension is intentional and not optional.
+The .NET 10 SDK is required: the libraries target `net8.0`, `net9.0` and `net10.0`, and the NativeAOT smoke test, the demo and the benchmarks target `net10.0`. Running the tests on every target also needs the .NET 8 and 9 runtimes. The multi-target dimension is intentional and not optional. The EF Core tests run against a real, file-backed SQLite database, so no Docker is required.
 
 Branch from `main`. Name the branch after intent: `feat/...`, `fix/...`, `docs/...`, `refactor/...`, `chore/...`, `test/...`.
 
@@ -36,16 +36,16 @@ Branch from `main`. Name the branch after intent: `feat/...`, `fix/...`, `docs/.
 
 ## Coding style
 
-- The repo enforces analyzer warnings as errors and `AllEnabledByDefault` analysis mode. Treat warnings as bugs.
+- The repo enforces analyzer warnings as errors and `latest-recommended` analysis level. Treat warnings as bugs.
 - Match the surrounding code style. The repo does not have a separate STYLE.md; if the existing code does X, do X.
 - Names are spelled out. No `mgr`, `svc`, `ctx`. The exceptions are well-known abbreviations (`Id`, `Db`, `Url`, `Json`).
 - Comments explain why, not what. The code already says what.
 
 ## Tests
 
-- xUnit + FluentAssertions.
-- Test names are sentences with underscores: `Account_withdraw_throws_when_insufficient_funds`.
-- Integration tests that need infrastructure go in a separate test project, gated by Testcontainers or `Skip` attributes when the infrastructure is unavailable.
+- xUnit with its built-in `Assert`.
+- Test names are sentences with underscores: `second_acquire_while_in_flight_is_reported_in_progress`.
+- Store behaviour is tested against a real relational database (SQLite) in `Moongazing.OrionOnce.EntityFrameworkCore.Tests`, through the reusable `IdempotencyStoreConformanceTests` suite. Time-dependent behaviour (retention, sweep) is driven by an injected `TimeProvider`, not by sleeping.
 - Coverage is a side effect of writing tests for behaviour, not a target in itself.
 
 ## Reporting bugs
@@ -56,11 +56,11 @@ Open an issue with:
 - The actual behaviour vs the expected behaviour
 - The runtime (`dotnet --info` output) and the package version
 
-If the bug has security implications, please email the maintainer privately before opening a public issue.
+If the bug has security implications, do not open a public issue; follow [SECURITY.md](SECURITY.md).
 
 ## Security
 
-Do not file public issues for vulnerabilities. Contact the maintainer directly. See [SECURITY.md](SECURITY.md) if present, otherwise email the address listed in the package NuGet metadata.
+Do not file public issues for vulnerabilities. Report them privately through GitHub as described in [SECURITY.md](SECURITY.md).
 
 ## Conduct
 

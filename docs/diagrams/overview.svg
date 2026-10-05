@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="650" viewBox="0 0 1200 650">
+  <!--
+    Orion family diagram template. Copy it, keep <defs> and <style>, replace the body.
+    Classes: .step (our code) .ext (backend / external system) .ok (success end) .fail (failure path)
+             .decision (diamond) .note (side remark) .lane (sequence lifeline)
+    Arrows: class="flow" (main path), "flow alt" (alternate / failure path, dashed), "flow back" (response).
+  -->
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrow-fail" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#dc2626"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: "Segoe UI", Inter, "Helvetica Neue", Arial, sans-serif; fill: #1e1b4b; }
+    .title { font-size: 24px; font-weight: 700; }
+    .subtitle { font-size: 14px; fill: #475569; }
+    .label { font-size: 15px; font-weight: 600; }
+    .small { font-size: 12.5px; fill: #475569; }
+    .code { font-family: "Cascadia Code", Consolas, "SF Mono", monospace; font-size: 13px; fill: #3730a3; }
+    .edge { font-size: 12.5px; fill: #334155; }
+    .step { fill: #eef2ff; stroke: #4f46e5; stroke-width: 2; }
+    .ext { fill: #f0f9ff; stroke: #0284c7; stroke-width: 2; }
+    .ok { fill: #ecfdf5; stroke: #059669; stroke-width: 2; }
+    .fail { fill: #fef2f2; stroke: #dc2626; stroke-width: 2; }
+    .decision { fill: #fffbeb; stroke: #d97706; stroke-width: 2; }
+    .note { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.5; stroke-dasharray: 4 3; }
+    .lane { stroke: #cbd5e1; stroke-width: 1.5; stroke-dasharray: 6 5; }
+    .flow { fill: none; stroke: #64748b; stroke-width: 2; marker-end: url(#arrow); }
+    .flow.alt { stroke: #dc2626; stroke-dasharray: 6 4; marker-end: url(#arrow-fail); }
+    .flow.back { stroke-dasharray: 6 4; }
+    .badge { fill: #4f46e5; }
+    .badge-text { font-size: 12px; font-weight: 700; fill: #ffffff; }
+  </style>
+
+  <rect width="1200" height="650" fill="#ffffff"/>
+
+  <text class="title" x="40" y="52">OrionOnce - packages and how the app reaches them</text>
+  <text class="subtitle" x="40" y="78">HTTP retries go through the middleware, other retries through IdempotentExecutor; both share one IIdempotencyStore.</text>
+
+  <!-- left column: callers -->
+  <rect class="ext" x="40" y="110" width="270" height="100" rx="14"/>
+  <text class="label" x="175" y="142" text-anchor="middle">HTTP client</text>
+  <text class="code" x="175" y="166" text-anchor="middle">Idempotency-Key: 3f1c...</text>
+  <text class="small" x="175" y="190" text-anchor="middle">retries a POST, PUT, PATCH or DELETE</text>
+
+  <path class="flow" d="M310,145 L388,145"/>
+  <text class="edge" x="349" y="135" text-anchor="middle">request</text>
+  <path class="flow back" d="M390,185 L312,185"/>
+  <text class="edge" x="351" y="203" text-anchor="middle">replay</text>
+
+  <rect class="step" x="40" y="250" width="270" height="100" rx="14"/>
+  <text class="label" x="175" y="282" text-anchor="middle">Queue consumer or job</text>
+  <text class="code" x="175" y="306" text-anchor="middle">executor.ExecuteAsync(...)</text>
+  <text class="small" x="175" y="330" text-anchor="middle">retried delivery, re-run job</text>
+
+  <path class="flow" d="M310,300 L388,300"/>
+  <text class="edge" x="349" y="290" text-anchor="middle">calls</text>
+
+  <!-- core -->
+  <rect class="step" x="390" y="110" width="380" height="300" rx="14"/>
+  <text class="label" x="580" y="140" text-anchor="middle">OrionOnce (core)</text>
+  <text class="code" x="410" y="172">IdempotencyMiddleware (UseOrionOnce)</text>
+  <text class="code" x="410" y="198">IdempotentExecutor</text>
+  <text class="code" x="410" y="224">RequestFingerprint (SHA-256)</text>
+  <text class="code" x="410" y="250">IdempotencyOptions</text>
+  <text class="code" x="410" y="276">IIdempotencyStore</text>
+  <text class="code" x="410" y="302">InMemoryIdempotencyStore (default)</text>
+  <text class="code" x="410" y="328">IdempotencyDiagnostics</text>
+  <text class="small" x="410" y="362">AddOrionOnce() registers the options, the</text>
+  <text class="small" x="410" y="382">diagnostics and the in-memory store (TryAdd)</text>
+
+  <!-- right column -->
+  <path class="flow" d="M770,160 L848,160"/>
+  <text class="edge" x="809" y="150" text-anchor="middle">runs once</text>
+
+  <rect class="step" x="850" y="110" width="310" height="100" rx="14"/>
+  <text class="label" x="1005" y="142" text-anchor="middle">Your endpoint handler</text>
+  <text class="small" x="1005" y="166" text-anchor="middle">runs once per key</text>
+  <text class="small" x="1005" y="188" text-anchor="middle">status, content type and body captured</text>
+
+  <path class="flow" d="M770,265 L848,265"/>
+  <text class="edge" x="809" y="255" text-anchor="middle">builds on</text>
+
+  <rect class="ext" x="850" y="230" width="310" height="70" rx="14"/>
+  <text class="label" x="1005" y="258" text-anchor="middle">Orion.Abstractions</text>
+  <text class="small" x="1005" y="282" text-anchor="middle">OrionInstrumentation, OrionTelemetry names</text>
+
+  <path class="flow" d="M770,365 L848,365"/>
+  <text class="edge" x="809" y="355" text-anchor="middle">emits</text>
+
+  <rect class="ext" x="850" y="320" width="310" height="90" rx="14"/>
+  <text class="label" x="1005" y="346" text-anchor="middle">OpenTelemetry metrics</text>
+  <text class="code" x="1005" y="370" text-anchor="middle">meter Moongazing.OrionOnce</text>
+  <text class="small" x="1005" y="394" text-anchor="middle">orion.once.requests (tag orion.outcome)</text>
+
+  <!-- storage row -->
+  <path class="flow" d="M580,468 L580,412"/>
+  <text class="edge" x="592" y="446">implements IIdempotencyStore</text>
+
+  <rect class="note" x="40" y="470" width="270" height="150" rx="10"/>
+  <text class="small" x="56" y="500">More than one instance? Register a</text>
+  <text class="small" x="56" y="522">shared IIdempotencyStore (this EF Core</text>
+  <text class="small" x="56" y="544">store or your own), so a retry that</text>
+  <text class="small" x="56" y="566">lands on another instance still</text>
+  <text class="small" x="56" y="588">replays the first response.</text>
+
+  <rect class="step" x="390" y="470" width="380" height="150" rx="14"/>
+  <text class="label" x="580" y="500" text-anchor="middle">OrionOnce.EntityFrameworkCore</text>
+  <text class="code" x="402" y="528">EntityFrameworkCoreIdempotencyStore&lt;TContext&gt;</text>
+  <text class="code" x="402" y="552">OrionOnceDbContext</text>
+  <text class="code" x="402" y="576">IdempotencyEntryConfiguration</text>
+  <text class="code" x="402" y="600">AddOrionOnceEntityFrameworkCoreStore()</text>
+
+  <path class="flow" d="M770,545 L848,545"/>
+  <text class="edge" x="809" y="535" text-anchor="middle">persists</text>
+
+  <rect class="ext" x="850" y="490" width="310" height="110" rx="14"/>
+  <text class="label" x="1005" y="522" text-anchor="middle">Relational database</text>
+  <text class="small" x="1005" y="546" text-anchor="middle">any EF Core relational provider</text>
+  <text class="code" x="1005" y="572" text-anchor="middle">table OrionOnceIdempotencyEntries</text>
+</svg>

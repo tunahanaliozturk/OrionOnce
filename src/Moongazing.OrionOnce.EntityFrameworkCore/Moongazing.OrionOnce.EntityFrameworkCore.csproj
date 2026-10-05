@@ -4,6 +4,7 @@
     <RootNamespace>Moongazing.OrionOnce.EntityFrameworkCore</RootNamespace>
     <Description>A durable Entity Framework Core idempotency store for OrionOnce. Persists idempotency keys, their in-flight lease, and the captured response across instances, with an atomic insert-wins AcquireAsync over a unique key constraint and a bulk-delete SweepAsync. References EntityFrameworkCore.Relational only, so the consumer chooses the database provider.</Description>
     <PackageTags>idempotency;idempotency-key;entityframeworkcore;efcore;store;orion</PackageTags>
+    <PackageReadmeFile>docs/README.md</PackageReadmeFile>
   </PropertyGroup>
 
   <!--
@@ -35,5 +36,8 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Moongazing.OrionOnce.EntityFrameworkCore.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="docs/README.md" Pack="true" PackagePath="docs/" />
   </ItemGroup>
 </Project>
